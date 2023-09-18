@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+// Powered by NeoBase: https://github.com/neobase-one
+
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -390,16 +392,12 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         require(!loan.paid, "Lending: loan already paid");
         require(block.timestamp < loan.startTime + loan.duration + repayGracePeriod, "Lending: too late");
 
-        uint256 totalPayable = loan.amount +
-            getDebtWithPenalty(
-                loan.amount,
-                loan.interestRate + protocolFee,
-                loan.duration,
-                block.timestamp - loan.startTime
-            ) +
-            getOriginationFee(loan.amount);
-        uint256 lenderPayable = loan.amount +
-            getDebtWithPenalty(loan.amount, loan.interestRate, loan.duration, block.timestamp - loan.startTime);
+        uint256 totalPayable = loan.amount
+            + getDebtWithPenalty(
+                loan.amount, loan.interestRate + protocolFee, loan.duration, block.timestamp - loan.startTime
+            ) + getOriginationFee(loan.amount);
+        uint256 lenderPayable = loan.amount
+            + getDebtWithPenalty(loan.amount, loan.interestRate, loan.duration, block.timestamp - loan.startTime);
         uint256 platformFee = totalPayable - lenderPayable;
 
         loan.paid = true;
@@ -449,17 +447,12 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         require(block.timestamp >= loan.startTime + loan.duration + repayGracePeriod, "Lending: too early");
         require(!loan.paid, "Lending: loan already paid");
 
-        uint256 totalPayable = loan.amount +
-            getDebtWithPenalty(
-                loan.amount,
-                loan.interestRate + protocolFee,
-                loan.duration,
-                block.timestamp - loan.startTime
-            ) +
-            getOriginationFee(loan.amount) +
-            getLiquidationFee(loan.amount);
-        uint256 lenderPayable = loan.amount +
-            getDebtWithPenalty(loan.amount, loan.interestRate, loan.duration, block.timestamp - loan.startTime);
+        uint256 totalPayable = loan.amount
+            + getDebtWithPenalty(
+                loan.amount, loan.interestRate + protocolFee, loan.duration, block.timestamp - loan.startTime
+            ) + getOriginationFee(loan.amount) + getLiquidationFee(loan.amount);
+        uint256 lenderPayable = loan.amount
+            + getDebtWithPenalty(loan.amount, loan.interestRate, loan.duration, block.timestamp - loan.startTime);
 
         loan.paid = true;
         IERC20(loan.token).safeTransferFrom(msg.sender, loan.lender, lenderPayable);
