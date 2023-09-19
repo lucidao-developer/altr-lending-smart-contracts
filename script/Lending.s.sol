@@ -7,6 +7,9 @@ import "forge-std/console.sol";
 import "forge-std/StdUtils.sol";
 
 contract DeployLending is Script {
+    uint256 immutable WEEK_1 = 7 * 60 * 60 * 24;
+    uint256 immutable MONTHS_1 = 60 * 60 * 24 * 30;
+
     function run() external {
         address GOVERNANCE_TREASURY_ADDRESS = vm.envAddress("GovernanceTreasuryAddress");
         address PRICE_INDEX_ADDRESS = vm.envAddress("PriceIndexAddress");
@@ -19,6 +22,18 @@ contract DeployLending is Script {
         originationFeeRanges[1] = 100000e18; // 100k
         originationFeeRanges[2] = 500000e18; // 500k
         uint256 liquidationFee = 30000; // 3%
+        uint256[] memory durations = new uint256[](5);
+        durations[0] = WEEK_1;
+        durations[1] = MONTHS_1;
+        durations[2] = 3 * MONTHS_1;
+        durations[3] = 6 * MONTHS_1;
+        durations[4] = 12 * MONTHS_1;
+        uint256[] memory interestRates = new uint256[](5);
+        interestRates[0] = 66000;
+        interestRates[1] = 73000;
+        interestRates[2] = 80000;
+        interestRates[3] = 88000;
+        interestRates[4] = 97000;
 
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         console.log("Deploying Lending contract...");
@@ -31,7 +46,9 @@ contract DeployLending is Script {
             repayGraceFee,
             originationFeeRanges,
             feeReductionFactor,
-            liquidationFee
+            liquidationFee,
+            durations,
+            interestRates
         );
         vm.stopBroadcast();
         console.log("Lending contract successfully deplyed at: ", address(lending));

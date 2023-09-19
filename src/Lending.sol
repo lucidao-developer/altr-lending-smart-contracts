@@ -20,7 +20,6 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     uint256 public constant SECONDS_IN_YEAR = 360 * 24 * 3600;
     uint256 public constant PRECISION = 10000;
     uint256 public constant MIN_GRACE_PERIOD = 3600; // 1 hr
-    uint256 public constant MAX_COEFFICIENT = 3 * PRECISION;
     uint256 public constant MAX_FEE = 3 * PRECISION;
     uint256 public constant MAX_INTEREST_RATE = 15 * PRECISION;
 
@@ -167,13 +166,6 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     event NFTClaimed(uint256 indexed loanId);
 
     /**
-     * @notice Emitted when fees are withdrawn from the contract
-     * @param token The address of the token in which fees are withdrawn
-     * @param amount The amount of fees that are withdrawn
-     */
-    event FeeWithdrawn(address indexed token, uint256 indexed amount);
-
-    /**
      * @notice Emitted when the price index oracle is updated
      * @param newPriceIndex The address of the new price index oracle
      */
@@ -256,6 +248,8 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _originationFeeRanges Origination fee ranges
      * @param _feeReductionFactor Origination fee reduction factor in %
      * @param _liquidationFee Liquidation fee in %
+     * @param _durations Array of allowed loan durations
+     * @param _interestRates Array of interest rates corresponding to each duration
      */
     constructor(
         address _priceIndex,
@@ -265,7 +259,9 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         uint256 _repayGraceFee,
         uint256[] memory _originationFeeRanges,
         uint256 _feeReductionFactor,
-        uint256 _liquidationFee
+        uint256 _liquidationFee,
+        uint256[] memory _durations,
+        uint256[] memory _interestRates
     ) {
         originationFeeRanges = _originationFeeRanges;
 
@@ -277,6 +273,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         _setGovernanceTreasury(_governanceTreasury);
         _setPriceIndex(_priceIndex);
         _setLiquidationFee(_liquidationFee);
+        _setLoanTypes(_durations, _interestRates);
     }
 
     /**
@@ -408,7 +405,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
             platformFee += (totalPayable * repayGraceFee) / PRECISION;
         }
 
-        IERC20(loan.token).safeTransferFrom(msg.sender, address(this), platformFee);
+        IERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, platformFee);
 
         IERC721(loan.nftCollection).safeTransferFrom(address(this), loan.borrower, loan.nftId);
 
@@ -456,7 +453,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
         loan.paid = true;
         IERC20(loan.token).safeTransferFrom(msg.sender, loan.lender, lenderPayable);
-        IERC20(loan.token).safeTransferFrom(msg.sender, address(this), totalPayable - lenderPayable);
+        IERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, totalPayable - lenderPayable);
 
         IERC721(loan.nftCollection).safeTransferFrom(address(this), msg.sender, loan.nftId);
 
@@ -562,11 +559,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _interestRates Array of interest rates corresponding to each duration
      */
     function setLoanTypes(uint256[] calldata _durations, uint256[] calldata _interestRates) external onlyOwner {
-        require(_durations.length == _interestRates.length, "Lending: invalid input");
-        for (uint256 i = 0; i < _durations.length; i++) {
-            require(_interestRates[i] <= MAX_INTEREST_RATE, "Lending: cannot be more than max");
-            aprFromDuration[_durations[i]] = _interestRates[i];
-        }
+        _setLoanTypes(_durations, _interestRates);
 
         emit LoanTypesSet(_durations, _interestRates);
     }
@@ -600,18 +593,6 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      */
     function setRanges(uint256[] memory _originationFeeRanges) public onlyOwner {
         originationFeeRanges = _originationFeeRanges;
-    }
-
-    /**
-     * @notice Allows the contract owner to withdraw the protocol fee
-     * @dev Anyone can call this function
-     * @param _token The token address for withdrawal
-     * @param _amount The amount of tokens to be withdrawn
-     */
-    function withdrawFee(address _token, uint256 _amount) external {
-        IERC20(_token).safeTransfer(governanceTreasury, _amount);
-
-        emit FeeWithdrawn(_token, _amount);
     }
 
     /**
@@ -741,5 +722,18 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         require(_repayGraceFee <= MAX_FEE, "Lending: cannot be more than max");
 
         repayGraceFee = _repayGraceFee;
+    }
+
+    /**
+     * @notice Internal function to set the available loan types by specifying the duration and interest rate
+     * @param _durations Array of loan durations
+     * @param _interestRates Array of interest rates corresponding to each duration
+     */
+    function _setLoanTypes(uint256[] memory _durations, uint256[] memory _interestRates) internal {
+        require(_durations.length == _interestRates.length, "Lending: invalid input");
+        for (uint256 i = 0; i < _durations.length; i++) {
+            require(_interestRates[i] <= MAX_INTEREST_RATE, "Lending: cannot be more than max");
+            aprFromDuration[_durations[i]] = _interestRates[i];
+        }
     }
 }
