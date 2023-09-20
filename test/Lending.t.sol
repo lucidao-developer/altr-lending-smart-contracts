@@ -30,14 +30,14 @@ contract TestLending is Test {
     function setUp() public {
         vm.startPrank(admin);
         uint256 protocolFee = 15000; // 1.5%
-        uint256 repayGracePeriod = 3600; // 1hr
+        uint256 repayGracePeriod = 60 * 60 * 24 * 5; // 5 days
         uint256 repayGraceFee = 25000; // 2.5
         uint256 feeReductionFactor = 14000; // 1.4
         uint256[] memory originationFeeRanges = new uint256[](3);
         originationFeeRanges[0] = 50000e18;
         originationFeeRanges[1] = 100000e18;
         originationFeeRanges[2] = 500000e18;
-        uint256 liquidationFee = 15000;
+        uint256 liquidationFee = 50000; // 5%
         uint256[] memory durations = new uint256[](6);
         durations[0] = WEEK_1;
         durations[1] = MONTHS_1;
@@ -52,6 +52,7 @@ contract TestLending is Test {
         interestRates[3] = 88000;
         interestRates[4] = 97000;
         interestRates[5] = 107000;
+        uint256 baseOriginationFee = 10000; // 1%
 
         priceIndex = new TestPriceIndex();
         lending = new Lending(
@@ -64,7 +65,8 @@ contract TestLending is Test {
             feeReductionFactor,
             liquidationFee,
             durations,
-            interestRates
+            interestRates,
+            baseOriginationFee
         );
         token = new TestERC20();
         nft = new TestERC721();
@@ -182,24 +184,26 @@ contract TestLending is Test {
         assertEq(lending.getOriginationFee(500000e18), 18215e17);
 
         vm.expectRevert("Lending: cannot be less than min grace period");
-        lending.setRepayGracePeriod(3599);
-        lending.setRepayGracePeriod(4000);
-        assertEq(lending.repayGracePeriod(), 4000);
+        lending.setRepayGracePeriod(172799);
+        vm.expectRevert("Lending: cannot be more than max grace period");
+        lending.setRepayGracePeriod(1296000);
+        lending.setRepayGracePeriod(172800);
+        assertEq(lending.repayGracePeriod(), 172800);
 
         vm.expectRevert("Lending: cannot be more than max");
-        lending.setRepayGraceFee(30001);
-        lending.setRepayGraceFee(30000);
-        assertEq(lending.repayGraceFee(), 30000);
+        lending.setRepayGraceFee(40001);
+        lending.setRepayGraceFee(40000);
+        assertEq(lending.repayGraceFee(), 40000);
 
         vm.expectRevert("Lending: cannot be more than max");
-        lending.setLiquidationFee(30001);
-        lending.setLiquidationFee(30000);
-        assertEq(lending.liquidationFee(), 30000);
+        lending.setLiquidationFee(150001);
+        lending.setLiquidationFee(150000);
+        assertEq(lending.liquidationFee(), 150000);
 
         vm.expectRevert("Lending: cannot be more than max");
-        lending.setProtocolFee(30001);
-        lending.setProtocolFee(30000);
-        assertEq(lending.protocolFee(), 30000);
+        lending.setProtocolFee(40001);
+        lending.setProtocolFee(40000);
+        assertEq(lending.protocolFee(), 40000);
 
         lending.setFeeReductionFactor(1000);
         assertEq(lending.feeReductionFactor(), 1000);
@@ -235,11 +239,11 @@ contract TestLending is Test {
         vm.expectRevert("Lending: cannot be more than max");
         durations = new uint256[](1);
         durations[0] = MONTHS_18;
-        aprs[0] = 150001;
+        aprs[0] = 200001;
         lending.setLoanTypes(durations, aprs);
-        aprs[0] = 150000;
+        aprs[0] = 200000;
         lending.setLoanTypes(durations, aprs);
-        assertEq(lending.aprFromDuration(durations[0]), 150000);
+        assertEq(lending.aprFromDuration(durations[0]), 200000);
         lending.unsetLoanTypes(durations);
         assertEq(lending.aprFromDuration(durations[0]), 0);
 
@@ -251,6 +255,11 @@ contract TestLending is Test {
         assertEq(lending.originationFeeRanges(0), 1000);
         assertEq(lending.originationFeeRanges(1), 2000);
         assertEq(lending.originationFeeRanges(2), 3000);
+
+        vm.expectRevert("Lending: cannot be more than max");
+        lending.setBaseOriginationFee(30001);
+        lending.setBaseOriginationFee(30000);
+        assertEq(lending.baseOriginationFee(), 30000);
 
         token.mint(borrower, INITIAL_TOKENS);
         assertEq(token.balanceOf(borrower) / 1e18, 2000000);
@@ -288,8 +297,8 @@ contract TestLending is Test {
         vm.stopPrank();
 
         assertEq(token.balanceOf(borrower) / 1e18, 1100000);
-        assertEq(token.balanceOf(lender) / 1e18, 747239);
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 152760);
+        assertEq(token.balanceOf(lender) / 1e18, 397239);
+        assertEq(token.balanceOf(governanceTreasury) / 1e18, 502760);
 
         assertEq(nft.ownerOf(1), address(lender));
     }

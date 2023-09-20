@@ -17,11 +17,16 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     using SafeERC20 for IERC20;
     using ERC165Checker for address;
 
-    uint256 public constant SECONDS_IN_YEAR = 360 * 24 * 3600;
+    uint256 private constant SECONDS_IN_DAY = 3600 * 24;
+    uint256 public constant SECONDS_IN_YEAR = 360 * SECONDS_IN_DAY;
     uint256 public constant PRECISION = 10000;
-    uint256 public constant MIN_GRACE_PERIOD = 3600; // 1 hr
-    uint256 public constant MAX_FEE = 3 * PRECISION;
-    uint256 public constant MAX_INTEREST_RATE = 15 * PRECISION;
+    uint256 public constant MIN_GRACE_PERIOD = 2 * SECONDS_IN_DAY;
+    uint256 public constant MAX_GRACE_PERIOD = 15 * SECONDS_IN_DAY;
+    uint256 public constant MAX_PROTOCOL_FEE = 4 * PRECISION;
+    uint256 public constant MAX_REPAY_GRACE_FEE = 4 * PRECISION;
+    uint256 public constant MAX_BASE_ORIGINATION_FEE = 3 * PRECISION;
+    uint256 public constant MAX_LIQUIDATION_FEE = 15 * PRECISION;
+    uint256 public constant MAX_INTEREST_RATE = 20 * PRECISION;
 
     /**
      * @notice PriceIndex contract for NFT price valuations
@@ -81,6 +86,11 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @notice Fee paid during the liquidation process
      */
     uint256 public liquidationFee;
+
+    /**
+     * @notice Base origination fee based on loan amount
+     */
+    uint256 public baseOriginationFee;
 
     /**
      * @notice ID for the last created loan
@@ -202,16 +212,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     event LiquidationFeeSet(uint256 newLiquidationFee);
 
     /**
-     * @notice Emitted when the penalty coefficient is updated
-     * @param newPenaltyCoefficient The new penalty coefficient
+     * @notice Emitted when the base origination fee is updated
+     * @param newBaseOriginationFee The new base origination fee
      */
-    event PenaltyCoefficientSet(uint256 newPenaltyCoefficient);
-
-    /**
-     * @notice Emitted when the penalty exponent is updated
-     * @param newPenaltyExponent The new penalty exponent
-     */
-    event PenaltyExponentSet(uint256 newPenaltyExponent);
+    event BaseOriginationFeeSet(uint256 newBaseOriginationFee);
 
     /**
      * @notice Emitted when new tokens are add to allowedTokens
@@ -261,7 +265,8 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         uint256 _feeReductionFactor,
         uint256 _liquidationFee,
         uint256[] memory _durations,
-        uint256[] memory _interestRates
+        uint256[] memory _interestRates,
+        uint256 _baseOriginationFee
     ) {
         originationFeeRanges = _originationFeeRanges;
 
@@ -274,6 +279,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         _setPriceIndex(_priceIndex);
         _setLiquidationFee(_liquidationFee);
         _setLoanTypes(_durations, _interestRates);
+        _setBaseOriginationFee(_baseOriginationFee);
     }
 
     /**
@@ -527,6 +533,17 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     }
 
     /**
+     * @notice Sets the base origination fee
+     * @dev Only the contract owner can call this function
+     * @param _fee The new base origination fee
+     */
+    function setBaseOriginationFee(uint256 _fee) external onlyOwner {
+        _setBaseOriginationFee(_fee);
+
+        emit BaseOriginationFeeSet(_fee);
+    }
+
+    /**
      * @notice Allows the contract owner to whitelist tokens that can be borrowed
      * @dev Only the contract owner can call this function
      * @param _tokens Array of token addresses to be whitelisted
@@ -636,7 +653,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @return uint256 The origination fee
      */
     function getOriginationFee(uint256 _amount) public view returns (uint256) {
-        uint256 originationFee = 1 * PRECISION; // 1 in PRECISION scale
+        uint256 originationFee = baseOriginationFee;
 
         for (uint256 i = 0; i < originationFeeRanges.length; i++) {
             if (_amount < originationFeeRanges[i]) {
@@ -689,7 +706,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _fee The new protocol fee
      */
     function _setProtocolFee(uint256 _fee) internal {
-        require(_fee <= MAX_FEE, "Lending: cannot be more than max");
+        require(_fee <= MAX_PROTOCOL_FEE, "Lending: cannot be more than max");
 
         protocolFee = _fee;
     }
@@ -699,7 +716,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _fee The new liquidation fee
      */
     function _setLiquidationFee(uint256 _fee) internal {
-        require(_fee <= MAX_FEE, "Lending: cannot be more than max");
+        require(_fee <= MAX_LIQUIDATION_FEE, "Lending: cannot be more than max");
 
         liquidationFee = _fee;
     }
@@ -710,6 +727,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      */
     function _setRepayGracePeriod(uint256 _gracePeriod) internal {
         require(_gracePeriod >= MIN_GRACE_PERIOD, "Lending: cannot be less than min grace period");
+        require(_gracePeriod < MAX_GRACE_PERIOD, "Lending: cannot be more than max grace period");
 
         repayGracePeriod = _gracePeriod;
     }
@@ -719,7 +737,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _repayGraceFee The new repay grace fee
      */
     function _setRepayGraceFee(uint256 _repayGraceFee) internal {
-        require(_repayGraceFee <= MAX_FEE, "Lending: cannot be more than max");
+        require(_repayGraceFee <= MAX_REPAY_GRACE_FEE, "Lending: cannot be more than max");
 
         repayGraceFee = _repayGraceFee;
     }
@@ -735,5 +753,15 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
             require(_interestRates[i] <= MAX_INTEREST_RATE, "Lending: cannot be more than max");
             aprFromDuration[_durations[i]] = _interestRates[i];
         }
+    }
+
+    /**
+     * @notice Internal function to set the new base origination fee
+     * @param _fee The new base origination fee
+     */
+    function _setBaseOriginationFee(uint256 _fee) internal {
+        require(_fee <= MAX_BASE_ORIGINATION_FEE, "Lending: cannot be more than max");
+
+        baseOriginationFee = _fee;
     }
 }

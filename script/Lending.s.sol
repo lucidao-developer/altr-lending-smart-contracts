@@ -14,14 +14,14 @@ contract DeployLending is Script {
         address GOVERNANCE_TREASURY_ADDRESS = vm.envAddress("GovernanceTreasuryAddress");
         address PRICE_INDEX_ADDRESS = vm.envAddress("PriceIndexAddress");
         uint256 protocolFee = 15000; // 1.5%
-        uint256 repayGracePeriod = 3600; // 1hr
+        uint256 repayGracePeriod = 60 * 60 * 24 * 5; // 5 days
         uint256 repayGraceFee = 25000; // 2.5%
         uint256 feeReductionFactor = 14000; // 1.4%
         uint256[] memory originationFeeRanges = new uint256[](3);
         originationFeeRanges[0] = 50000e18; // 50k
         originationFeeRanges[1] = 100000e18; // 100k
         originationFeeRanges[2] = 500000e18; // 500k
-        uint256 liquidationFee = 30000; // 3%
+        uint256 liquidationFee = 50000; // 5%
         uint256[] memory durations = new uint256[](5);
         durations[0] = WEEK_1;
         durations[1] = MONTHS_1;
@@ -34,6 +34,7 @@ contract DeployLending is Script {
         interestRates[2] = 80000;
         interestRates[3] = 88000;
         interestRates[4] = 97000;
+        uint256 baseOriginationFee = 10000; // 1%
 
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         console.log("Deploying Lending contract...");
@@ -48,7 +49,8 @@ contract DeployLending is Script {
             feeReductionFactor,
             liquidationFee,
             durations,
-            interestRates
+            interestRates,
+            baseOriginationFee
         );
         vm.stopBroadcast();
         console.log("Lending contract successfully deplyed at: ", address(lending));
