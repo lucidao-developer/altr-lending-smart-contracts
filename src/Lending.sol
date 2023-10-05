@@ -415,7 +415,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         IERC20(loan.token).safeTransferFrom(msg.sender, loan.lender, lenderPayable);
 
         if (block.timestamp > loan.startTime + loan.duration) {
-            platformFee += (totalPayable * repayGraceFee) / PRECISION;
+            platformFee += (lenderPayable * repayGraceFee) / PRECISION;
         }
 
         IERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, platformFee);

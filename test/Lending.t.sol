@@ -186,9 +186,9 @@ contract TestLending is Test {
         lending.repayLoan(1);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(borrower) / 1e18, 978_230);
+        assertEq(token.balanceOf(borrower) / 1e18, 978_298);
         assertEq(token.balanceOf(lender) / 1e18, 1_016_050);
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 5_720);
+        assertEq(token.balanceOf(governanceTreasury) / 1e18, 5_651);
 
         assertEq(nft.ownerOf(1), address(borrower));
     }
