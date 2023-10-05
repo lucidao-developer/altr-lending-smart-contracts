@@ -26,6 +26,7 @@ contract TestLending is Test {
     address lender = address(0x3);
     address governanceTreasury = address(0x4);
     address liquidator = address(0x5);
+    address treasuryManager = address(0xDA0);
 
     function setUp() public {
         vm.startPrank(admin);
@@ -68,6 +69,7 @@ contract TestLending is Test {
             interestRates,
             baseOriginationFee
         );
+        lending.grantRole(lending.TREASURY_MANAGER_ROLE(), treasuryManager);
         token = new TestERC20();
         nft = new TestERC721();
 
@@ -231,12 +233,16 @@ contract TestLending is Test {
         lending.setPriceIndex(borrower);
         lending.setPriceIndex(address(priceIndex));
         assertEq(address(lending.priceIndex()), address(priceIndex));
+        vm.stopPrank();
 
+        vm.startPrank(treasuryManager);
         vm.expectRevert("Lending: cannot be null address");
         lending.setGovernanceTreasury(address(0));
         lending.setGovernanceTreasury(governanceTreasury);
         assertEq(lending.governanceTreasury(), governanceTreasury);
+        vm.stopPrank();
 
+        vm.startPrank(admin);
         address[] memory nfts = new address[](1);
         nfts[0] = address(nft);
 

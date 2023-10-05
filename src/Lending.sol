@@ -9,12 +9,12 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
 import {UD60x18, ud, convert} from "@prb/math/src/UD60x18.sol";
 import {IPriceIndex} from "./IPriceIndex.sol";
 
-contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
+contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     using SafeERC20 for IERC20;
     using ERC165Checker for address;
 
@@ -29,6 +29,8 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     uint256 public constant MAX_LIQUIDATION_FEE = 1500; // 15%
     uint256 public constant MAX_INTEREST_RATE = 2000; // 20%
     uint256 public constant MAX_ORIGINATION_FEE_RANGES_LENGTH = 6;
+
+    bytes32 public constant TREASURY_MANAGER_ROLE = keccak256("TREASURY_MANAGER_ROLE");
 
     /**
      * @notice PriceIndex contract for NFT price valuations
@@ -293,6 +295,8 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         _setBaseOriginationFee(_baseOriginationFee);
         _setRanges(_originationFeeRanges);
         _setFeeReductionFactor(_feeReductionFactor);
+
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
     /**
@@ -484,10 +488,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Updates the address of the price index contract used for valuations
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _priceIndex The address of the new price index contract
      */
-    function setPriceIndex(address _priceIndex) external onlyOwner {
+    function setPriceIndex(address _priceIndex) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setPriceIndex(_priceIndex);
 
         emit PriceIndexSet(_priceIndex);
@@ -495,10 +499,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Updates the address of the governance treasury contract
-     * @dev Only the contract owner can call this function
+     * @dev Only the treasury manager can call this function
      * @param _governanceTreasury The address of the new governance treasury contract
      */
-    function setGovernanceTreasury(address _governanceTreasury) external onlyOwner {
+    function setGovernanceTreasury(address _governanceTreasury) external onlyRole(TREASURY_MANAGER_ROLE) {
         _setGovernanceTreasury(_governanceTreasury);
 
         emit GovernanceTreasurySet(_governanceTreasury);
@@ -506,10 +510,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the grace period for loan repayment
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _gracePeriod The new grace period for repayment
      */
-    function setRepayGracePeriod(uint256 _gracePeriod) external onlyOwner {
+    function setRepayGracePeriod(uint256 _gracePeriod) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setRepayGracePeriod(_gracePeriod);
 
         emit RepayGracePeriodSet(_gracePeriod);
@@ -517,10 +521,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the grace fee for loan repayment
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _repayGraceFee The new grace fee for repayment
      */
-    function setRepayGraceFee(uint256 _repayGraceFee) external onlyOwner {
+    function setRepayGraceFee(uint256 _repayGraceFee) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setRepayGraceFee(_repayGraceFee);
 
         emit RepayGraceFeeSet(_repayGraceFee);
@@ -528,10 +532,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the protocol fee
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _fee The new protocol fee
      */
-    function setProtocolFee(uint256 _fee) external onlyOwner {
+    function setProtocolFee(uint256 _fee) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setProtocolFee(_fee);
 
         emit ProtocolFeeSet(_fee);
@@ -539,10 +543,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the liquidation fee
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _fee The new liquidation fee
      */
-    function setLiquidationFee(uint256 _fee) external onlyOwner {
+    function setLiquidationFee(uint256 _fee) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setLiquidationFee(_fee);
 
         emit LiquidationFeeSet(_fee);
@@ -550,21 +554,21 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the base origination fee
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _fee The new base origination fee
      */
-    function setBaseOriginationFee(uint256 _fee) external onlyOwner {
+    function setBaseOriginationFee(uint256 _fee) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setBaseOriginationFee(_fee);
 
         emit BaseOriginationFeeSet(_fee);
     }
 
     /**
-     * @notice Allows the contract owner to whitelist tokens that can be borrowed
-     * @dev Only the contract owner can call this function
+     * @notice Allows the contract admin to whitelist tokens that can be borrowed
+     * @dev Only the admin can call this function
      * @param _tokens Array of token addresses to be whitelisted
      */
-    function setTokens(address[] calldata _tokens) external onlyOwner {
+    function setTokens(address[] calldata _tokens) external onlyRole(DEFAULT_ADMIN_ROLE) {
         uint256 tokenLength = _tokens.length;
         for (uint256 i = 0; i < tokenLength;) {
             allowedTokens[_tokens[i]] = true;
@@ -577,11 +581,11 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     }
 
     /**
-     * @notice Allows the contract owner to remove tokens from the whitelist
-     * @dev Only the contract owner can call this function
+     * @notice Allows the contract admin to remove tokens from the whitelist
+     * @dev Only the admin can call this function
      * @param _tokens Array of token addresses to be removed from the whitelist
      */
-    function unsetTokens(address[] calldata _tokens) external onlyOwner {
+    function unsetTokens(address[] calldata _tokens) external onlyRole(DEFAULT_ADMIN_ROLE) {
         uint256 tokenLength = _tokens.length;
         for (uint256 i = 0; i < tokenLength;) {
             allowedTokens[_tokens[i]] = false;
@@ -595,11 +599,14 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the available loan types by specifying the duration and interest rate
-     * @dev Only the contract owner can call this function. The lengths of _durations and _interestRates arrays must be equal
+     * @dev Only the admin can call this function. The lengths of _durations and _interestRates arrays must be equal
      * @param _durations Array of loan durations
      * @param _interestRates Array of interest rates corresponding to each duration
      */
-    function setLoanTypes(uint256[] calldata _durations, uint256[] calldata _interestRates) external onlyOwner {
+    function setLoanTypes(uint256[] calldata _durations, uint256[] calldata _interestRates)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         _setLoanTypes(_durations, _interestRates);
 
         emit LoanTypesSet(_durations, _interestRates);
@@ -607,10 +614,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Removes the specified loan types by duration
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _durations Array of loan durations to be removed
      */
-    function unsetLoanTypes(uint256[] calldata _durations) external onlyOwner {
+    function unsetLoanTypes(uint256[] calldata _durations) external onlyRole(DEFAULT_ADMIN_ROLE) {
         uint256 durationsLength = _durations.length;
         for (uint256 i = 0; i < durationsLength;) {
             delete aprFromDuration[_durations[i]];
@@ -624,10 +631,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the fee reduction factor
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _factor The new fee reduction factor
      */
-    function setFeeReductionFactor(uint256 _factor) external onlyOwner {
+    function setFeeReductionFactor(uint256 _factor) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setFeeReductionFactor(_factor);
 
         emit FeeReductionFactorSet(_factor);
@@ -635,10 +642,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the originationFeeRanges array
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _originationFeeRanges The new originationFeeRanges array
      */
-    function setRanges(uint256[] memory _originationFeeRanges) public onlyOwner {
+    function setRanges(uint256[] memory _originationFeeRanges) public onlyRole(DEFAULT_ADMIN_ROLE) {
         _setRanges(_originationFeeRanges);
 
         emit OriginationFeeRangesSet(_originationFeeRanges);
