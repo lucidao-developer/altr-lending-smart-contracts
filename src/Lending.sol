@@ -21,6 +21,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     uint256 public constant SECONDS_IN_YEAR = 360 * SECONDS_IN_DAY;
     uint256 public constant MIN_GRACE_PERIOD = 2 * SECONDS_IN_DAY;
     uint256 public constant MAX_GRACE_PERIOD = 15 * SECONDS_IN_DAY;
+    uint256 public constant VALUATION_EXPIRY = 150 * SECONDS_IN_DAY;
     uint256 public constant PRECISION = 10000;
     uint256 public constant MAX_PROTOCOL_FEE = 400; // 4%
     uint256 public constant MAX_REPAY_GRACE_FEE = 400; // 4%
@@ -316,6 +317,8 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
         IPriceIndex.Valuation memory valuation = priceIndex.getValuation(_nftCollection, _nftId);
 
+        require(valuation.timestamp + VALUATION_EXPIRY > block.timestamp, "Lending: valuation expired");
+        require(valuation.ltv <= 100, "Lending: ltv greater than max");
         require(_amount <= (valuation.price * valuation.ltv) / 100, "Lending: amount greater than max borrow");
 
         Loan storage loan = loans[++lastLoanId];

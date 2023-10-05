@@ -144,6 +144,21 @@ contract TestLending is Test {
         assertEq(token.balanceOf(governanceTreasury) / 1e18, 743);
 
         assertEq(nft.ownerOf(1), address(borrower));
+
+        vm.startPrank(borrower);
+        vm.warp(6 * MONTHS_1);
+        vm.expectRevert("Lending: valuation expired");
+        lending.requestLoan(address(token), borrowAmount, address(nft), 2, MONTHS_18, MONTHS_18);
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        priceIndex.setValuation(address(nft), 2, 100, 101);
+        vm.stopPrank();
+
+        vm.startPrank(borrower);
+        vm.expectRevert("Lending: ltv greater than max");
+        lending.requestLoan(address(token), borrowAmount, address(nft), 2, MONTHS_18, MONTHS_18);
+        vm.stopPrank();
     }
 
     function testGracePeriod() public {
