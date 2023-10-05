@@ -4,6 +4,7 @@ pragma solidity ^0.8.19;
 // Powered by NeoBase: https://github.com/neobase-one
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
@@ -319,7 +320,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
         require(valuation.timestamp + VALUATION_EXPIRY > block.timestamp, "Lending: valuation expired");
         require(valuation.ltv <= 100, "Lending: ltv greater than max");
-        require(_amount <= (valuation.price * valuation.ltv) / 100, "Lending: amount greater than max borrow");
+        require(
+            _amount <= (valuation.price * (10 ** ERC20(_token).decimals()) * valuation.ltv) / 100,
+            "Lending: amount greater than max borrow"
+        );
 
         Loan storage loan = loans[++lastLoanId];
         loan.borrower = msg.sender;

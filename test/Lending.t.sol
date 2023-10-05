@@ -77,8 +77,8 @@ contract TestLending is Test {
 
         address[] memory nfts = new address[](1);
         nfts[0] = address(nft);
-        priceIndex.setValuation(address(nft), 1, 200000e18, 50);
-        priceIndex.setValuation(address(nft), 2, 200000e18, 50);
+        priceIndex.setValuation(address(nft), 1, 200_000, 50);
+        priceIndex.setValuation(address(nft), 2, 200_000, 50);
 
         token.mint(borrower, INITIAL_TOKENS);
         token.mint(lender, INITIAL_TOKENS);
@@ -281,9 +281,9 @@ contract TestLending is Test {
         nft.mint(borrower, 3, "");
         assertEq(nft.ownerOf(3), address(borrower));
 
-        priceIndex.setValuation(address(nft), 1, 2_000_000e18, 100);
+        priceIndex.setValuation(address(nft), 1, 2_000_000, 100);
         (, uint256 price, uint256 ltv) = priceIndex.valuations(address(nft), 1);
-        assertEq(price, 2_000_000e18);
+        assertEq(price, 2_000_000);
         assertEq(ltv, 100);
 
         vm.stopPrank();
