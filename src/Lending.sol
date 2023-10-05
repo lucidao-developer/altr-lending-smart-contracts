@@ -416,7 +416,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         uint256 totalPayable = loan.amount
             + getDebtWithPenalty(
                 loan.amount, loan.interestRate + protocolFee, loan.duration, block.timestamp - loan.startTime
-            ) + getOriginationFee(loan.amount);
+            ) + getOriginationFee(loan.amount, loan.token);
         uint256 lenderPayable = loan.amount
             + getDebtWithPenalty(loan.amount, loan.interestRate, loan.duration, block.timestamp - loan.startTime);
         uint256 platformFee = totalPayable - lenderPayable;
@@ -471,7 +471,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         uint256 totalPayable = loan.amount
             + getDebtWithPenalty(
                 loan.amount, loan.interestRate + protocolFee, loan.duration, block.timestamp - loan.startTime
-            ) + getOriginationFee(loan.amount) + getLiquidationFee(loan.amount);
+            ) + getOriginationFee(loan.amount, loan.token) + getLiquidationFee(loan.amount);
         uint256 lenderPayable = loan.amount
             + getDebtWithPenalty(loan.amount, loan.interestRate, loan.duration, block.timestamp - loan.startTime);
 
@@ -674,13 +674,13 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _amount The loan amount
      * @return uint256 The origination fee
      */
-    function getOriginationFee(uint256 _amount) public view returns (uint256) {
+    function getOriginationFee(uint256 _amount, address token) public view returns (uint256) {
         UD60x18 originationFee = convert(baseOriginationFee);
         UD60x18 factor = convert(feeReductionFactor);
         UD60x18 precision = convert(PRECISION);
 
         for (uint256 i = 0; i < originationFeeRanges.length; i++) {
-            if (_amount < originationFeeRanges[i]) {
+            if (_amount < originationFeeRanges[i] * (10 ** ERC20(token).decimals())) {
                 break;
             } else {
                 originationFee = originationFee.mul(precision).div(factor);

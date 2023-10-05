@@ -34,9 +34,9 @@ contract TestLending is Test {
         uint256 repayGraceFee = 250; // 2.5
         uint256 feeReductionFactor = 14000; // 140%
         uint256[] memory originationFeeRanges = new uint256[](3);
-        originationFeeRanges[0] = 50000e18;
-        originationFeeRanges[1] = 100000e18;
-        originationFeeRanges[2] = 500000e18;
+        originationFeeRanges[0] = 50000;
+        originationFeeRanges[1] = 100000;
+        originationFeeRanges[2] = 500000;
         uint256 liquidationFee = 500; // 5%
         uint256[] memory durations = new uint256[](6);
         durations[0] = WEEK_1;
@@ -196,7 +196,7 @@ contract TestLending is Test {
     function testSetters() public {
         vm.startPrank(admin);
 
-        assertEq(lending.getOriginationFee(500_000e18), 1822157434402332361500);
+        assertEq(lending.getOriginationFee(500_000e18, address(token)), 1822157434402332361500);
 
         vm.expectRevert("Lending: cannot be less than min grace period");
         lending.setRepayGracePeriod(172799);
@@ -498,7 +498,7 @@ contract TestLending is Test {
 
         uint256 feePlusInterest = lending.getDebtWithPenalty(
             amount, lending.aprFromDuration(loanDuration) + lending.protocolFee(), loanDuration, block.timestamp
-        ) + lending.getOriginationFee(amount);
+        ) + lending.getOriginationFee(amount, address(token));
         uint256 interest =
             lending.getDebtWithPenalty(amount, lending.aprFromDuration(loanDuration), loanDuration, repaymentDuration);
 
@@ -538,7 +538,7 @@ contract TestLending is Test {
 
         uint256 feePlusInterest = lending.getDebtWithPenalty(
             amount, lending.aprFromDuration(loanDuration) + lending.protocolFee(), loanDuration, block.timestamp
-        ) + lending.getOriginationFee(amount) + lending.getLiquidationFee(amount);
+        ) + lending.getOriginationFee(amount, address(token)) + lending.getLiquidationFee(amount);
         uint256 interest =
             lending.getDebtWithPenalty(amount, lending.aprFromDuration(loanDuration), loanDuration, block.timestamp);
 
