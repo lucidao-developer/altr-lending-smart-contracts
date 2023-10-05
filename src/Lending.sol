@@ -221,7 +221,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     event BaseOriginationFeeSet(uint256 newBaseOriginationFee);
 
     /**
-     * @notice Emitted when new tokens are add to allowedTokens
+     * @notice Emitted when new tokens are added to allowedTokens
      * @param tokens New allowed tokens
      */
     event TokensSet(address[] tokens);
@@ -269,6 +269,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _liquidationFee Liquidation fee in %
      * @param _durations Array of allowed loan durations
      * @param _interestRates Array of interest rates corresponding to each duration
+     * @param _baseOriginationFee Base origination fee to reduce based on origination fee ranges
      */
     constructor(
         address _priceIndex,
@@ -637,6 +638,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     /**
      * @notice Retrieves the loan details for a specific loan ID
      * @dev Anyone can call this function
+     * @dev This function can return uninitialized loans if called with indices greater than lastLoanId
      * @param loanId The ID of the loan
      * @return loan The loan structure containing the details of the loan
      */
