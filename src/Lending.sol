@@ -662,7 +662,8 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         if (_repaymentDuration > _loanDuration) {
             _repaymentDuration = _loanDuration;
         }
-        UD60x18 accruedDebt = convert((_borrowedAmount * _apr * _repaymentDuration) / SECONDS_IN_YEAR / PRECISION);
+        UD60x18 accruedDebt =
+            convert(_borrowedAmount * _apr * _repaymentDuration).div(convert(SECONDS_IN_YEAR * PRECISION));
         UD60x18 penaltyFactor = convert(_loanDuration - _repaymentDuration).div(convert(_loanDuration));
 
         return convert(accruedDebt.add(accruedDebt.mul(penaltyFactor)));
