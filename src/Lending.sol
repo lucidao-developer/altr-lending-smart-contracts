@@ -18,11 +18,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     using SafeERC20 for IERC20;
     using ERC165Checker for address;
 
-    uint256 private constant SECONDS_IN_DAY = 3600 * 24;
-    uint256 public constant SECONDS_IN_YEAR = 360 * SECONDS_IN_DAY;
-    uint256 public constant MIN_GRACE_PERIOD = 2 * SECONDS_IN_DAY;
-    uint256 public constant MAX_GRACE_PERIOD = 15 * SECONDS_IN_DAY;
-    uint256 public constant VALUATION_EXPIRY = 150 * SECONDS_IN_DAY;
+    uint256 public constant SECONDS_IN_YEAR = 360 days;
+    uint256 public constant MIN_GRACE_PERIOD = 2 days;
+    uint256 public constant MAX_GRACE_PERIOD = 15 days;
+    uint256 public constant VALUATION_EXPIRY = 150 days;
     uint256 public constant PRECISION = 10000;
     uint256 public constant MAX_PROTOCOL_FEE = 400; // 4%
     uint256 public constant MAX_REPAY_GRACE_FEE = 400; // 4%
@@ -346,9 +345,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         loan.duration = _duration;
         loan.collateralValue = valuation.price;
         loan.interestRate = aprFromDuration[_duration];
-        loan.paid = false;
         loan.deadline = _deadline;
-        loan.cancelled = false;
 
         emit LoanCreated(
             lastLoanId,
@@ -568,8 +565,12 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _tokens Array of token addresses to be whitelisted
      */
     function setTokens(address[] calldata _tokens) external onlyOwner {
-        for (uint256 i = 0; i < _tokens.length; i++) {
+        uint256 tokenLength = _tokens.length;
+        for (uint256 i = 0; i < tokenLength;) {
             allowedTokens[_tokens[i]] = true;
+            unchecked {
+                ++i;
+            }
         }
 
         emit TokensSet(_tokens);
@@ -581,8 +582,12 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _tokens Array of token addresses to be removed from the whitelist
      */
     function unsetTokens(address[] calldata _tokens) external onlyOwner {
-        for (uint256 i = 0; i < _tokens.length; i++) {
+        uint256 tokenLength = _tokens.length;
+        for (uint256 i = 0; i < tokenLength;) {
             allowedTokens[_tokens[i]] = false;
+            unchecked {
+                ++i;
+            }
         }
 
         emit TokensUnset(_tokens);
@@ -606,8 +611,12 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _durations Array of loan durations to be removed
      */
     function unsetLoanTypes(uint256[] calldata _durations) external onlyOwner {
-        for (uint256 i = 0; i < _durations.length; i++) {
+        uint256 durationsLength = _durations.length;
+        for (uint256 i = 0; i < durationsLength;) {
             delete aprFromDuration[_durations[i]];
+            unchecked {
+                ++i;
+            }
         }
 
         emit LoanTypesUnset(_durations);
@@ -682,11 +691,15 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         UD60x18 factor = convert(feeReductionFactor);
         UD60x18 precision = convert(PRECISION);
 
-        for (uint256 i = 0; i < originationFeeRanges.length; i++) {
+        uint256 originationFeeRangesLength = originationFeeRanges.length;
+        for (uint256 i = 0; i < originationFeeRangesLength;) {
             if (_amount < originationFeeRanges[i] * (10 ** ERC20(token).decimals())) {
                 break;
             } else {
                 originationFee = originationFee.mul(precision).div(factor);
+            }
+            unchecked {
+                ++i;
             }
         }
         return convert(convert(_amount).mul(originationFee).div(precision));
@@ -775,11 +788,15 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _interestRates Array of interest rates corresponding to each duration
      */
     function _setLoanTypes(uint256[] memory _durations, uint256[] memory _interestRates) internal {
-        require(_durations.length == _interestRates.length, "Lending: invalid input");
-        for (uint256 i = 0; i < _durations.length; i++) {
+        uint256 durationsLength = _durations.length;
+        require(durationsLength == _interestRates.length, "Lending: invalid input");
+        for (uint256 i = 0; i < durationsLength;) {
             require(_interestRates[i] <= MAX_INTEREST_RATE, "Lending: cannot be more than max");
             require(_interestRates[i] > 0, "Lending: cannot be 0");
             aprFromDuration[_durations[i]] = _interestRates[i];
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -798,13 +815,17 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _originationFeeRanges The new origination fee ranges array
      */
     function _setRanges(uint256[] memory _originationFeeRanges) internal {
-        require(_originationFeeRanges.length > 0, "Lending: cannot be an empty array");
-        require(_originationFeeRanges.length <= MAX_ORIGINATION_FEE_RANGES_LENGTH, "Lending: cannot be more than max length");
+        uint256 originationFeeRangesLength = _originationFeeRanges.length;
+        require(originationFeeRangesLength > 0, "Lending: cannot be an empty array");
+        require(originationFeeRangesLength <= MAX_ORIGINATION_FEE_RANGES_LENGTH, "Lending: cannot be more than max length");
         require(_originationFeeRanges[0] > 0, "Lending: first entry must be greater than 0");
-        for (uint256 i = 1; i < _originationFeeRanges.length; i++) {
+        for (uint256 i = 1; i < originationFeeRangesLength;) {
             require(
                 _originationFeeRanges[i - 1] < _originationFeeRanges[i], "Lending: entries must be strictly increasing"
             );
+            unchecked {
+                ++i;
+            }
         }
 
         originationFeeRanges = _originationFeeRanges;
