@@ -220,8 +220,10 @@ contract TestLending is Test {
         lending.setProtocolFee(400);
         assertEq(lending.protocolFee(), 400);
 
-        lending.setFeeReductionFactor(100);
-        assertEq(lending.feeReductionFactor(), 100);
+        vm.expectRevert("Lending: fee reduction factor cannot be less than PRECISION");
+        lending.setFeeReductionFactor(9999);
+        lending.setFeeReductionFactor(10000);
+        assertEq(lending.feeReductionFactor(), 10000);
 
         vm.expectRevert("Lending: cannot be null address");
         lending.setPriceIndex(address(0));
@@ -256,20 +258,46 @@ contract TestLending is Test {
         durations[0] = MONTHS_18;
         aprs[0] = 2001;
         lending.setLoanTypes(durations, aprs);
+
+        vm.expectRevert("Lending: cannot be 0");
+        aprs[0] = 0;
+        lending.setLoanTypes(durations, aprs);
+
         aprs[0] = 2000;
         lending.setLoanTypes(durations, aprs);
         assertEq(lending.aprFromDuration(durations[0]), 2000);
         lending.unsetLoanTypes(durations);
         assertEq(lending.aprFromDuration(durations[0]), 0);
 
+        vm.expectRevert("Lending: cannot be an empty array");
+        uint256[] memory emptyRanges = new uint256[](0);
+        lending.setRanges(emptyRanges);
+        vm.expectRevert("Lending: first entry must be greater than 0");
         uint256[] memory newRanges = new uint256[](3);
+        newRanges[0] = 0;
+        lending.setRanges(newRanges);
+        vm.expectRevert("Lending: entries must be strictly increasing");
         newRanges[0] = 1000;
-        newRanges[1] = 2000;
+        newRanges[1] = 1000;
         newRanges[2] = 3000;
+        lending.setRanges(newRanges);
+        newRanges[1] = 2000;
         lending.setRanges(newRanges);
         assertEq(lending.originationFeeRanges(0), 1000);
         assertEq(lending.originationFeeRanges(1), 2000);
         assertEq(lending.originationFeeRanges(2), 3000);
+
+        vm.expectRevert("Lending: cannot be more than max length");
+        uint256[] memory wrongRanges = new uint256[](7);
+        wrongRanges[0] = 1000;
+        wrongRanges[1] = 2000;
+        wrongRanges[2] = 3000;
+        wrongRanges[3] = 4000;
+        wrongRanges[4] = 5000;
+        wrongRanges[5] = 6000;
+        wrongRanges[6] = 7000;
+        lending.setRanges(wrongRanges);
+
 
         vm.expectRevert("Lending: cannot be more than max");
         lending.setBaseOriginationFee(301);

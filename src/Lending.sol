@@ -29,6 +29,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     uint256 public constant MAX_BASE_ORIGINATION_FEE = 300; // 3%
     uint256 public constant MAX_LIQUIDATION_FEE = 1500; // 15%
     uint256 public constant MAX_INTEREST_RATE = 2000; // 20%
+    uint256 public constant MAX_ORIGINATION_FEE_RANGES_LENGTH = 6;
 
     /**
      * @notice PriceIndex contract for NFT price valuations
@@ -245,6 +246,18 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     event LoanTypesUnset(uint256[] durations);
 
     /**
+     * @notice Emitted when originationFeeRanges is updated
+     * @param originationFeeRanges The new origination fee ranges
+     */
+    event OriginationFeeRangesSet(uint256[] originationFeeRanges);
+
+    /**
+     * @notice Emitted when feeReductionFactor is updated
+     * @param feeReductionFactor The new fee reduction factor
+     */
+    event FeeReductionFactorSet(uint256 feeReductionFactor);
+
+    /**
      * @notice Contract constructor
      * @param _priceIndex Price index contract address
      * @param _governanceTreasury Governance treasury contract address
@@ -270,10 +283,6 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         uint256[] memory _interestRates,
         uint256 _baseOriginationFee
     ) {
-        originationFeeRanges = _originationFeeRanges;
-
-        feeReductionFactor = _feeReductionFactor;
-
         _setProtocolFee(_protocolFee);
         _setRepayGracePeriod(_gracePeriod);
         _setRepayGraceFee(_repayGraceFee);
@@ -282,6 +291,8 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         _setLiquidationFee(_liquidationFee);
         _setLoanTypes(_durations, _interestRates);
         _setBaseOriginationFee(_baseOriginationFee);
+        _setRanges(_originationFeeRanges);
+        _setFeeReductionFactor(_feeReductionFactor);
     }
 
     /**
@@ -607,7 +618,9 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _factor The new fee reduction factor
      */
     function setFeeReductionFactor(uint256 _factor) external onlyOwner {
-        feeReductionFactor = _factor;
+        _setFeeReductionFactor(_factor);
+
+        emit FeeReductionFactorSet(_factor);
     }
 
     /**
@@ -616,7 +629,9 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _originationFeeRanges The new originationFeeRanges array
      */
     function setRanges(uint256[] memory _originationFeeRanges) public onlyOwner {
-        originationFeeRanges = _originationFeeRanges;
+        _setRanges(_originationFeeRanges);
+
+        emit OriginationFeeRangesSet(_originationFeeRanges);
     }
 
     /**
@@ -758,6 +773,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         require(_durations.length == _interestRates.length, "Lending: invalid input");
         for (uint256 i = 0; i < _durations.length; i++) {
             require(_interestRates[i] <= MAX_INTEREST_RATE, "Lending: cannot be more than max");
+            require(_interestRates[i] > 0, "Lending: cannot be 0");
             aprFromDuration[_durations[i]] = _interestRates[i];
         }
     }
@@ -770,5 +786,32 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         require(_fee <= MAX_BASE_ORIGINATION_FEE, "Lending: cannot be more than max");
 
         baseOriginationFee = _fee;
+    }
+
+    /**
+     * @notice Internal function to set new origination fee ranges array
+     * @param _originationFeeRanges The new origination fee ranges array
+     */
+    function _setRanges(uint256[] memory _originationFeeRanges) internal {
+        require(_originationFeeRanges.length > 0, "Lending: cannot be an empty array");
+        require(_originationFeeRanges.length <= MAX_ORIGINATION_FEE_RANGES_LENGTH, "Lending: cannot be more than max length");
+        require(_originationFeeRanges[0] > 0, "Lending: first entry must be greater than 0");
+        for (uint256 i = 1; i < _originationFeeRanges.length; i++) {
+            require(
+                _originationFeeRanges[i - 1] < _originationFeeRanges[i], "Lending: entries must be strictly increasing"
+            );
+        }
+
+        originationFeeRanges = _originationFeeRanges;
+    }
+
+    /**
+     * @notice Internal function to set new fee refuction factor
+     * @param _factor The new fee reduction factor
+     */
+    function _setFeeReductionFactor(uint256 _factor) internal {
+        require(_factor >= PRECISION, "Lending: fee reduction factor cannot be less than PRECISION");
+
+        feeReductionFactor = _factor;
     }
 }
