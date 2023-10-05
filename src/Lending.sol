@@ -19,14 +19,14 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     uint256 private constant SECONDS_IN_DAY = 3600 * 24;
     uint256 public constant SECONDS_IN_YEAR = 360 * SECONDS_IN_DAY;
-    uint256 public constant PRECISION = 10000;
     uint256 public constant MIN_GRACE_PERIOD = 2 * SECONDS_IN_DAY;
     uint256 public constant MAX_GRACE_PERIOD = 15 * SECONDS_IN_DAY;
-    uint256 public constant MAX_PROTOCOL_FEE = 4 * PRECISION;
-    uint256 public constant MAX_REPAY_GRACE_FEE = 4 * PRECISION;
-    uint256 public constant MAX_BASE_ORIGINATION_FEE = 3 * PRECISION;
-    uint256 public constant MAX_LIQUIDATION_FEE = 15 * PRECISION;
-    uint256 public constant MAX_INTEREST_RATE = 20 * PRECISION;
+    uint256 public constant PRECISION = 10000;
+    uint256 public constant MAX_PROTOCOL_FEE = 400; // 4%
+    uint256 public constant MAX_REPAY_GRACE_FEE = 400; // 4%
+    uint256 public constant MAX_BASE_ORIGINATION_FEE = 300; // 3%
+    uint256 public constant MAX_LIQUIDATION_FEE = 1500; // 15%
+    uint256 public constant MAX_INTEREST_RATE = 2000; // 20%
 
     /**
      * @notice PriceIndex contract for NFT price valuations
@@ -640,7 +640,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         if (_repaymentDuration > _loanDuration) {
             _repaymentDuration = _loanDuration;
         }
-        UD60x18 accruedDebt = convert((_borrowedAmount * _apr * _repaymentDuration) / SECONDS_IN_YEAR / 100 / PRECISION);
+        UD60x18 accruedDebt = convert((_borrowedAmount * _apr * _repaymentDuration) / SECONDS_IN_YEAR / PRECISION);
         UD60x18 penaltyFactor = convert(_loanDuration - _repaymentDuration).div(convert(_loanDuration));
 
         return convert(accruedDebt.add(accruedDebt.mul(penaltyFactor)));
@@ -662,7 +662,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
                 originationFee = (originationFee * PRECISION) / feeReductionFactor;
             }
         }
-        return (_amount * originationFee) / 100 / PRECISION;
+        return (_amount * originationFee) / PRECISION;
     }
 
     /**
