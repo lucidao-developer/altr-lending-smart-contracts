@@ -675,16 +675,18 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @return uint256 The origination fee
      */
     function getOriginationFee(uint256 _amount) public view returns (uint256) {
-        uint256 originationFee = baseOriginationFee;
+        UD60x18 originationFee = convert(baseOriginationFee);
+        UD60x18 factor = convert(feeReductionFactor);
+        UD60x18 precision = convert(PRECISION);
 
         for (uint256 i = 0; i < originationFeeRanges.length; i++) {
             if (_amount < originationFeeRanges[i]) {
                 break;
             } else {
-                originationFee = (originationFee * PRECISION) / feeReductionFactor;
+                originationFee = originationFee.mul(precision).div(factor);
             }
         }
-        return (_amount * originationFee) / PRECISION;
+        return convert(convert(_amount).mul(originationFee).div(precision));
     }
 
     /**

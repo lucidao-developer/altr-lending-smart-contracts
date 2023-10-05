@@ -139,9 +139,9 @@ contract TestLending is Test {
         lending.repayLoan(1);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(borrower) / 1e18, 997_523);
+        assertEq(token.balanceOf(borrower) / 1e18, 997_512);
         assertEq(token.balanceOf(lender) / 1e18, 1_001_733);
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 743);
+        assertEq(token.balanceOf(governanceTreasury) / 1e18, 753);
 
         assertEq(nft.ownerOf(1), address(borrower));
 
@@ -186,9 +186,9 @@ contract TestLending is Test {
         lending.repayLoan(1);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(borrower) / 1e18, 978_298);
+        assertEq(token.balanceOf(borrower) / 1e18, 978_288);
         assertEq(token.balanceOf(lender) / 1e18, 1_016_050);
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 5_651);
+        assertEq(token.balanceOf(governanceTreasury) / 1e18, 5_661);
 
         assertEq(nft.ownerOf(1), address(borrower));
     }
@@ -196,7 +196,7 @@ contract TestLending is Test {
     function testSetters() public {
         vm.startPrank(admin);
 
-        assertEq(lending.getOriginationFee(500_000e18), 1_750e18);
+        assertEq(lending.getOriginationFee(500_000e18), 1822157434402332361500);
 
         vm.expectRevert("Lending: cannot be less than min grace period");
         lending.setRepayGracePeriod(172799);
@@ -341,8 +341,8 @@ contract TestLending is Test {
 
         assertEq(token.balanceOf(borrower) / 1e18, 1_100_000);
         assertEq(token.balanceOf(lender) / 1e18, 1_016_050);
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 7_750);
-        assertEq(token.balanceOf(liquidator) / 1e18, 876_200);
+        assertEq(token.balanceOf(governanceTreasury) / 1e18, 7_760);
+        assertEq(token.balanceOf(liquidator) / 1e18, 876_189);
 
         assertEq(nft.ownerOf(1), address(liquidator));
     }
