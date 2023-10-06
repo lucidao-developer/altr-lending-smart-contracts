@@ -3,7 +3,6 @@ pragma solidity 0.8.19;
 
 // Powered by NeoBase: https://github.com/neobase-one
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -15,7 +14,7 @@ import {UD60x18, ud, convert, ceil} from "@prb/math/src/UD60x18.sol";
 import {IPriceIndex} from "./IPriceIndex.sol";
 
 contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
-    using SafeERC20 for IERC20;
+    using SafeERC20 for ERC20;
     using ERC165Checker for address;
 
     uint256 public constant SECONDS_IN_YEAR = 360 days;
@@ -412,7 +411,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         loan.lender = msg.sender;
         loan.startTime = block.timestamp;
 
-        IERC20(loan.token).safeTransferFrom(msg.sender, loan.borrower, loan.amount);
+        ERC20(loan.token).safeTransferFrom(msg.sender, loan.borrower, loan.amount);
         IERC721(loan.nftCollection).safeTransferFrom(loan.borrower, address(this), loan.nftId);
 
         emit LoanAccepted(_loanId, loan.lender, loan.startTime);
@@ -440,13 +439,13 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
 
         loan.paid = true;
 
-        IERC20(loan.token).safeTransferFrom(msg.sender, loan.lender, lenderPayable);
+        ERC20(loan.token).safeTransferFrom(msg.sender, loan.lender, lenderPayable);
 
         if (block.timestamp > loan.startTime + loan.duration) {
             platformFee += (lenderPayable * repayGraceFee) / PRECISION;
         }
 
-        IERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, platformFee);
+        ERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, platformFee);
 
         IERC721(loan.nftCollection).safeTransferFrom(address(this), loan.borrower, loan.nftId);
 
@@ -496,8 +495,8 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
             + getDebtWithPenalty(loan.amount, loan.interestRate, loan.duration, block.timestamp - loan.startTime);
 
         loan.paid = true;
-        IERC20(loan.token).safeTransferFrom(msg.sender, loan.lender, lenderPayable);
-        IERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, totalPayable - lenderPayable);
+        ERC20(loan.token).safeTransferFrom(msg.sender, loan.lender, lenderPayable);
+        ERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, totalPayable - lenderPayable);
 
         IERC721(loan.nftCollection).safeTransferFrom(address(this), msg.sender, loan.nftId);
 
