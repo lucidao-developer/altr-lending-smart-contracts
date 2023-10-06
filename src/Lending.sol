@@ -449,7 +449,9 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
             platformFee += (lenderPayable * repayGraceFee) / PRECISION;
         }
 
-        ERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, platformFee);
+        if (platformFee > 0) {
+            ERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, platformFee);
+        }
 
         IERC721(loan.nftCollection).safeTransferFrom(address(this), loan.borrower, loan.nftId);
 
@@ -497,10 +499,14 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
             ) + getOriginationFee(loan.amount, loan.token) + getLiquidationFee(loan.amount);
         uint256 lenderPayable = loan.amount
             + getDebtWithPenalty(loan.amount, loan.interestRate, loan.duration, block.timestamp - loan.startTime);
+        uint256 platformFee = totalPayable - lenderPayable;
 
         loan.paid = true;
         ERC20(loan.token).safeTransferFrom(msg.sender, loan.lender, lenderPayable);
-        ERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, totalPayable - lenderPayable);
+
+        if (platformFee > 0) {
+            ERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, platformFee);
+        }
 
         IERC721(loan.nftCollection).safeTransferFrom(address(this), msg.sender, loan.nftId);
 
