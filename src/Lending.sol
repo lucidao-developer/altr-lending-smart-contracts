@@ -407,6 +407,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         require(loan.borrower != address(0) && loan.lender == address(0), "Lending: invalid loan id");
         require(!loan.cancelled, "Lending: loan cancelled");
         require(loan.deadline > block.timestamp, "Lending: loan acceptance deadline passed");
+        require(allowedTokens[loan.token], "Lending: borrow token not allowed");
 
         loan.lender = msg.sender;
         loan.startTime = block.timestamp;

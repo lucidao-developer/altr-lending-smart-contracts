@@ -131,6 +131,21 @@ contract TestLending is Test {
         assertEq(loan.nftId, 1);
         assertEq(loan.duration, MONTHS_18);
 
+        vm.startPrank(admin);
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(token);
+        lending.unsetTokens(tokens);
+        vm.stopPrank();
+
+        vm.startPrank(lender);
+        vm.expectRevert("Lending: borrow token not allowed");
+        lending.acceptLoan(1);
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        lending.setTokens(tokens);
+        vm.stopPrank();
+
         vm.startPrank(lender);
         lending.acceptLoan(1);
         vm.stopPrank();
