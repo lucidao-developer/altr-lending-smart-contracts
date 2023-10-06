@@ -17,6 +17,25 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     using SafeERC20 for ERC20;
     using ERC165Checker for address;
 
+    /**
+     * @notice Loan struct to store loans details
+     */
+    struct Loan {
+        address borrower;
+        address token;
+        uint256 amount;
+        address nftCollection;
+        uint256 nftId;
+        uint256 duration;
+        uint256 interestRate;
+        uint256 collateralValue;
+        address lender;
+        uint256 startTime;
+        uint256 deadline;
+        bool paid;
+        bool cancelled;
+    }
+
     uint256 public constant SECONDS_IN_YEAR = 360 days;
     uint256 public constant MIN_GRACE_PERIOD = 2 days;
     uint256 public constant MAX_GRACE_PERIOD = 15 days;
@@ -42,25 +61,6 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
      * @notice Address of the GovernanceTreasury contract
      */
     address public governanceTreasury;
-
-    /**
-     * @notice Loan struct to store loans details
-     */
-    struct Loan {
-        address borrower;
-        address token;
-        uint256 amount;
-        address nftCollection;
-        uint256 nftId;
-        uint256 duration;
-        uint256 interestRate;
-        uint256 collateralValue;
-        address lender;
-        uint256 startTime;
-        uint256 deadline;
-        bool paid;
-        bool cancelled;
-    }
 
     /**
      * @notice Protocol fee rate (in basis points)
@@ -310,14 +310,6 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         _setLenderExclusiveLiquidationPeriod(_lenderExclusiveLiquidationPeriod);
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-    }
-
-    /**
-     * @notice ERC721 Token Received Hook
-     * @dev Needed as a callback to receive ERC721 token through `safeTransferFrom` function
-     */
-    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
-        return IERC721Receiver.onERC721Received.selector;
     }
 
     /**
@@ -686,7 +678,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
      * @dev Only the admin can call this function
      * @param _originationFeeRanges The new originationFeeRanges array
      */
-    function setRanges(uint256[] memory _originationFeeRanges) public onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setRanges(uint256[] memory _originationFeeRanges) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setRanges(_originationFeeRanges);
 
         emit OriginationFeeRangesSet(_originationFeeRanges);
@@ -704,28 +696,11 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     }
 
     /**
-     * @notice Calculates the debt amount with added penalty based on time and amount borrowed
-     * @dev This is a utility function for internal use
-     * @param _borrowedAmount The original amount borrowed
-     * @param _apr The annual percentage rate
-     * @param _loanDuration The duration of the loan
-     * @param _repaymentDuration The time taken for repayment
-     * @return uint256 The debt amount including penalties
+     * @notice ERC721 Token Received Hook
+     * @dev Needed as a callback to receive ERC721 token through `safeTransferFrom` function
      */
-    function getDebtWithPenalty(
-        uint256 _borrowedAmount,
-        uint256 _apr,
-        uint256 _loanDuration,
-        uint256 _repaymentDuration
-    ) public pure returns (uint256) {
-        if (_repaymentDuration > _loanDuration) {
-            _repaymentDuration = _loanDuration;
-        }
-        UD60x18 accruedDebt =
-            convert(_borrowedAmount * _apr * _repaymentDuration).div(convert(SECONDS_IN_YEAR * PRECISION));
-        UD60x18 penaltyFactor = convert(_loanDuration - _repaymentDuration).div(convert(_loanDuration));
-
-        return convert(ceil(accruedDebt.add(accruedDebt.mul(penaltyFactor))));
+    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
+        return IERC721Receiver.onERC721Received.selector;
     }
 
     /**
@@ -761,6 +736,31 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
      */
     function getLiquidationFee(uint256 _borrowedAmount) public view returns (uint256) {
         return (_borrowedAmount * liquidationFee) / PRECISION;
+    }
+
+    /**
+     * @notice Calculates the debt amount with added penalty based on time and amount borrowed
+     * @dev This is a utility function for internal use
+     * @param _borrowedAmount The original amount borrowed
+     * @param _apr The annual percentage rate
+     * @param _loanDuration The duration of the loan
+     * @param _repaymentDuration The time taken for repayment
+     * @return uint256 The debt amount including penalties
+     */
+    function getDebtWithPenalty(
+        uint256 _borrowedAmount,
+        uint256 _apr,
+        uint256 _loanDuration,
+        uint256 _repaymentDuration
+    ) public pure returns (uint256) {
+        if (_repaymentDuration > _loanDuration) {
+            _repaymentDuration = _loanDuration;
+        }
+        UD60x18 accruedDebt =
+            convert(_borrowedAmount * _apr * _repaymentDuration).div(convert(SECONDS_IN_YEAR * PRECISION));
+        UD60x18 penaltyFactor = convert(_loanDuration - _repaymentDuration).div(convert(_loanDuration));
+
+        return convert(accruedDebt.add(accruedDebt.mul(penaltyFactor)));
     }
 
     /**
