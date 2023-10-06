@@ -89,6 +89,8 @@ contract TestLending is Test {
         nft.mint(borrower, 1, "");
         nft.mint(borrower, 2, "");
 
+        priceIndex.setValuation(address(0xC0113C71), 0, 1000, 50);
+
         vm.stopPrank();
 
         vm.startPrank(borrower);
@@ -119,6 +121,8 @@ contract TestLending is Test {
         lending.requestLoan(address(token), borrowAmount, address(nft), 1, MONTHS_18, block.timestamp - 1);
         vm.expectRevert("Lending: amount greater than max borrow");
         lending.requestLoan(address(token), borrowAmount + 1, address(nft), 1, MONTHS_18, MONTHS_18);
+        vm.expectRevert("Lending: collection does not support IERC721 interface");
+        lending.requestLoan(address(token), 50, address(0xC0113C710), 0, MONTHS_18, MONTHS_18);
         lending.requestLoan(address(token), borrowAmount, address(nft), 1, MONTHS_18, MONTHS_18);
         assertEq(lending.lastLoanId(), 1);
         vm.stopPrank();

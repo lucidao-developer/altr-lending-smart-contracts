@@ -343,6 +343,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         require(aprFromDuration[_duration] != 0, "Lending: invalid duration");
         require(_amount > 0, "Lending: borrow amount must be greater than zero");
         require(_deadline > block.timestamp, "Lending: deadline must be after current timestamp");
+        require(
+            _nftCollection.supportsInterface(type(IERC721).interfaceId),
+            "Lending: collection does not support IERC721 interface"
+        );
 
         IPriceIndex.Valuation memory valuation = priceIndex.getValuation(_nftCollection, _nftId);
 
