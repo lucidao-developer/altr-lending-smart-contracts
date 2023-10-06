@@ -313,9 +313,11 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     }
 
     /**
-     * @notice Allows a user to borrow a specified amount using an NFT as collateral
-     * @dev Ensures that the token is allowed and the duration is valid before creating the loan
-     * @dev Only NFTs that have a valuation from the PriceIndex contract can be used as collateral
+     * @notice Allows a user to request a loan using their NFT as collateral
+     * @custom:use-case If Alice wants to borrow 500.000 USDT for 7 days using her Altr NFT, 
+     * she would call this function
+     * @dev Ensures token is allowed, duration is valid, and the NFT has a price valuation
+     * @dev Only NFTs from approved collections with a price valuation can be used
      * @param _token The address of the token being borrowed
      * @param _amount The amount of tokens to be borrowed
      * @param _nftCollection The address of the NFT collection used as collateral
@@ -375,7 +377,9 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     }
 
     /**
-     * @notice Allows a borrower to cancel a loan
+     * @notice Allows the borrower to cancel their loan request if it hasn't been accepted yet
+     * @custom:use-case If Alice changes her mind and doesn't want the loan anymore, she can cancel it
+     * before a lender accepts it
      * @dev Borrower can cancel a requested load if not yet accepted by any lender
      * @param _loanId The ID of the loan to cancel
      */
@@ -392,7 +396,9 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     }
 
     /**
-     * @notice Allows a lender to accept an existing loan
+     * @notice Allows a lender to accept an existing loan request
+     * @custom:use-case If Bob wants to lend 500.000 USDT to Alice for 7 days, he would accept her
+     * loan request by calling this function
      * @dev Transfers the borrowed tokens from the lender to the borrower and sets the loan start time
      * @param _loanId The ID of the loan to accept
      */
@@ -414,7 +420,9 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     }
 
     /**
-     * @notice Allows a borrower to repay a loan
+     * @notice Allows a borrower to repay the loan and reclaim their NFT
+     * @custom:use-case After 7 days, Alice can repay her 500.000 USDT loan along with the accrued interest
+     * and fees to get her NFT back
      * @dev Transfers the repayment amount and additional fees to the lender and contract respectively
      * @param _loanId The ID of the loan being repaid
      */
@@ -452,6 +460,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
 
     /**
      * @notice Allows a lender to claim NFT from an overdue loan
+     * @custom:use-case If Alice fails to repay her loan, Bob can claim her NFT as collateral
      * @dev Transfers the collateralized NFT to the lender
      * @param _loanId The ID of the loan being liquidated
      */
@@ -471,7 +480,9 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     }
 
     /**
-     * @notice Allows an address to liquidate an overdue loan
+     * @notice Allows anyone to liquidate an overdue loan, sending repayment and fees to the lender and claiming the NFT
+     * @custom:use-case If Alice defaults and Bob doesn't claim the NFT, Charlie can liquidate the loan,
+     * paying Bob and claiming the NFT
      * @dev Transfers the repayment amount and additional fees to the lender and contract respectively
      * @param _loanId The ID of the loan being liquidated
      */
