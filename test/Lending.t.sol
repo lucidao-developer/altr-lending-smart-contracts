@@ -35,9 +35,9 @@ contract TestLending is Test {
         uint256 repayGraceFee = 250; // 2.5
         uint256 feeReductionFactor = 14000; // 140%
         uint256[] memory originationFeeRanges = new uint256[](3);
-        originationFeeRanges[0] = 50000;
-        originationFeeRanges[1] = 100000;
-        originationFeeRanges[2] = 500000;
+        originationFeeRanges[0] = 50_000; // 50k
+        originationFeeRanges[1] = 100_000; // 100k
+        originationFeeRanges[2] = 500_000; // 500k
         uint256 liquidationFee = 500; // 5%
         uint256[] memory durations = new uint256[](6);
         durations[0] = WEEK_1;
@@ -47,12 +47,12 @@ contract TestLending is Test {
         durations[4] = 12 * MONTHS_1;
         durations[5] = MONTHS_18;
         uint256[] memory interestRates = new uint256[](6);
-        interestRates[0] = 660;
-        interestRates[1] = 730;
-        interestRates[2] = 800;
-        interestRates[3] = 880;
-        interestRates[4] = 970;
-        interestRates[5] = 1070;
+        interestRates[0] = 660; // 6.6%
+        interestRates[1] = 730; // 7.3%
+        interestRates[2] = 800; // 8%
+        interestRates[3] = 880; // 8.8%
+        interestRates[4] = 970; // 9.7%
+        interestRates[5] = 1070; // 10.7% 
         uint256 baseOriginationFee = 100; // 1%
 
         priceIndex = new TestPriceIndex();
@@ -141,9 +141,9 @@ contract TestLending is Test {
         lending.repayLoan(1);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(borrower) / 1e18, 997_512);
-        assertEq(token.balanceOf(lender) / 1e18, 1_001_733);
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 753);
+        assertEq(token.balanceOf(borrower) / 1e18, 997_512); // Checked with altr google sheets (1_000_000 - 2_487)
+        assertEq(token.balanceOf(lender) / 1e18, 1_001_733); // Checked with altr google sheets
+        assertEq(token.balanceOf(governanceTreasury) / 1e18, 753); // Checked with altr google sheets
 
         assertEq(nft.ownerOf(1), address(borrower));
 
@@ -188,9 +188,9 @@ contract TestLending is Test {
         lending.repayLoan(1);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(borrower) / 1e18, 978_288);
-        assertEq(token.balanceOf(lender) / 1e18, 1_016_050);
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 5_661);
+        assertEq(token.balanceOf(borrower) / 1e18, 978_288);  // Checked with altr google sheets (1_000_000 - 18_810(interest + fees) - (116_050 * 2.5% = 2_901) grace period fee)
+        assertEq(token.balanceOf(lender) / 1e18, 1_016_050); // Checked with altr google sheets
+        assertEq(token.balanceOf(governanceTreasury) / 1e18, 5_661); // Checked with altr google sheets (2760 (fees + spread) + 2901 grace period fee)
 
         assertEq(nft.ownerOf(1), address(borrower));
     }
@@ -345,10 +345,10 @@ contract TestLending is Test {
         lending.liquidateLoan(1);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(borrower) / 1e18, 1_100_000);
-        assertEq(token.balanceOf(lender) / 1e18, 1_016_050);
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 7_760);
-        assertEq(token.balanceOf(liquidator) / 1e18, 876_189);
+        assertEq(token.balanceOf(borrower) / 1e18, 1_100_000); // 1_000_000 pre-owned + 100_000 borrowed
+        assertEq(token.balanceOf(lender) / 1e18, 1_016_050); // Checked with altr google sheets
+        assertEq(token.balanceOf(governanceTreasury) / 1e18, 7_760); // Checked with altr google sheets (2760 (fees + spread) + (100_000 * 5% = 5000) liquidation fee)
+        assertEq(token.balanceOf(liquidator) / 1e18, 876_189); // Checked with altr google sheets (1_000_000 - (116_050 repay borrower debt + 2760 (fees + spread)) + 5000 liquidation fee)
 
         assertEq(nft.ownerOf(1), address(liquidator));
     }
