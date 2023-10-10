@@ -51,7 +51,7 @@ contract TestLending is Test {
         interestRates[2] = 800; // 8%
         interestRates[3] = 880; // 8.8%
         interestRates[4] = 970; // 9.7%
-        interestRates[5] = 1070; // 10.7% 
+        interestRates[5] = 1_070; // 10.7%
         uint256 baseOriginationFee = 100; // 1%
         uint256 lenderExclusiveLiquidationPeriod = 2 days;
 
@@ -182,13 +182,13 @@ contract TestLending is Test {
         lending.acceptLoan(1);
         vm.stopPrank();
 
-        vm.warp(MONTHS_18 + 1000);
+        vm.warp(MONTHS_18 + 1_000);
 
         vm.startPrank(borrower);
         lending.repayLoan(1);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(borrower) / 1e18, 978_288);  // Checked with altr google sheets (1_000_000 - 18_810(interest + fees) - (116_050 * 2.5% = 2_901) grace period fee)
+        assertEq(token.balanceOf(borrower) / 1e18, 978_288); // Checked with altr google sheets (1_000_000 - 18_810(interest + fees) - (116_050 * 2.5% = 2_901) grace period fee)
         assertEq(token.balanceOf(lender) / 1e18, 1_016_050); // Checked with altr google sheets
         assertEq(token.balanceOf(governanceTreasury) / 1e18, 5_661); // Checked with altr google sheets (2760 (fees + spread) + 2901 grace period fee)
 
@@ -198,13 +198,13 @@ contract TestLending is Test {
     function testSetters() public {
         vm.startPrank(admin);
 
-        assertEq(lending.getOriginationFee(500_000e18, address(token)), 1822157434402332361500);
+        assertEq(lending.getOriginationFee(500_000e18, address(token)), 1_822_157_434_402_332_361_500);
 
         vm.expectRevert("Lending: cannot be less than min grace period");
-        lending.setRepayGracePeriod(172799);
+        lending.setRepayGracePeriod(172_799);
         vm.expectRevert("Lending: cannot be more than max grace period");
-        lending.setRepayGracePeriod(1296000);
-        lending.setRepayGracePeriod(172800);
+        lending.setRepayGracePeriod(1_296_000);
+        lending.setRepayGracePeriod(172_800);
         assertEq(lending.repayGracePeriod(), 172800);
 
         vm.expectRevert("Lending: cannot be more than max");
@@ -213,9 +213,9 @@ contract TestLending is Test {
         assertEq(lending.repayGraceFee(), 400);
 
         vm.expectRevert("Lending: cannot be more than max");
-        lending.setLiquidationFee(1501);
+        lending.setLiquidationFee(1_501);
         lending.setLiquidationFee(1500);
-        assertEq(lending.liquidationFee(), 1500);
+        assertEq(lending.liquidationFee(), 1_500);
 
         vm.expectRevert("Lending: cannot be more than max");
         lending.setProtocolFee(401);
@@ -223,9 +223,9 @@ contract TestLending is Test {
         assertEq(lending.protocolFee(), 400);
 
         vm.expectRevert("Lending: fee reduction factor cannot be less than PRECISION");
-        lending.setFeeReductionFactor(9999);
-        lending.setFeeReductionFactor(10000);
-        assertEq(lending.feeReductionFactor(), 10000);
+        lending.setFeeReductionFactor(9_999);
+        lending.setFeeReductionFactor(10_000);
+        assertEq(lending.feeReductionFactor(), 10_000);
 
         vm.expectRevert("Lending: cannot be null address");
         lending.setPriceIndex(address(0));
@@ -278,7 +278,7 @@ contract TestLending is Test {
 
         aprs[0] = 2000;
         lending.setLoanTypes(durations, aprs);
-        assertEq(lending.aprFromDuration(durations[0]), 2000);
+        assertEq(lending.aprFromDuration(durations[0]), 2_000);
         lending.unsetLoanTypes(durations);
         assertEq(lending.aprFromDuration(durations[0]), 0);
 
@@ -290,27 +290,26 @@ contract TestLending is Test {
         newRanges[0] = 0;
         lending.setRanges(newRanges);
         vm.expectRevert("Lending: entries must be strictly increasing");
-        newRanges[0] = 1000;
-        newRanges[1] = 1000;
-        newRanges[2] = 3000;
+        newRanges[0] = 1_000;
+        newRanges[1] = 1_000;
+        newRanges[2] = 3_000;
         lending.setRanges(newRanges);
-        newRanges[1] = 2000;
+        newRanges[1] = 2_000;
         lending.setRanges(newRanges);
-        assertEq(lending.originationFeeRanges(0), 1000);
-        assertEq(lending.originationFeeRanges(1), 2000);
-        assertEq(lending.originationFeeRanges(2), 3000);
+        assertEq(lending.originationFeeRanges(0), 1_000);
+        assertEq(lending.originationFeeRanges(1), 2_000);
+        assertEq(lending.originationFeeRanges(2), 3_000);
 
         vm.expectRevert("Lending: cannot be more than max length");
         uint256[] memory wrongRanges = new uint256[](7);
-        wrongRanges[0] = 1000;
-        wrongRanges[1] = 2000;
-        wrongRanges[2] = 3000;
-        wrongRanges[3] = 4000;
-        wrongRanges[4] = 5000;
-        wrongRanges[5] = 6000;
-        wrongRanges[6] = 7000;
+        wrongRanges[0] = 1_000;
+        wrongRanges[1] = 2_000;
+        wrongRanges[2] = 3_000;
+        wrongRanges[3] = 4_000;
+        wrongRanges[4] = 5_000;
+        wrongRanges[5] = 6_000;
+        wrongRanges[6] = 7_000;
         lending.setRanges(wrongRanges);
-
 
         vm.expectRevert("Lending: cannot be more than max");
         lending.setBaseOriginationFee(301);
@@ -403,7 +402,7 @@ contract TestLending is Test {
     }
 
     function testCancelLoan() public {
-        uint256 borrowAmount = 100000e18;
+        uint256 borrowAmount = 100_000e18;
 
         vm.startPrank(borrower);
         lending.requestLoan(address(token), borrowAmount, address(nft), 1, MONTHS_18, MONTHS_18);
@@ -434,7 +433,7 @@ contract TestLending is Test {
     }
 
     function testLoanDeadline() public {
-        uint256 borrowAmount = 100000e18;
+        uint256 borrowAmount = 100_000e18;
 
         vm.startPrank(borrower);
         lending.requestLoan(address(token), borrowAmount, address(nft), 1, MONTHS_18, MONTHS_18);
@@ -449,7 +448,7 @@ contract TestLending is Test {
     }
 
     function testRepayLoan() public {
-        uint256 borrowAmount = 100000e18;
+        uint256 borrowAmount = 100_000e18;
 
         vm.startPrank(borrower);
         lending.requestLoan(address(token), borrowAmount, address(nft), 1, MONTHS_18, MONTHS_18);
@@ -479,7 +478,7 @@ contract TestLending is Test {
         vm.assume(repaymentDuration > 0);
         uint256 loanDuration = MONTHS_18;
         vm.assume(repaymentDuration < loanDuration);
-        uint256 maxBorrowAmount = 100000e18;
+        uint256 maxBorrowAmount = 100_000e18;
         uint256 borrowerStartBalance = token.balanceOf(borrower);
         uint256 lenderStartBalance = token.balanceOf(lender);
         uint256 contractStartBalance = token.balanceOf(governanceTreasury);
@@ -527,7 +526,7 @@ contract TestLending is Test {
 
     function testZFuzz_Liquidate(uint256 amount) public {
         vm.assume(amount > 0);
-        uint256 maxBorrowAmount = 100000e18;
+        uint256 maxBorrowAmount = 100_000e18;
         uint256 borrowerStartBalance = token.balanceOf(borrower);
         uint256 lenderStartBalance = token.balanceOf(lender);
         uint256 contractStartBalance = token.balanceOf(governanceTreasury);
@@ -550,7 +549,7 @@ contract TestLending is Test {
         vm.startPrank(liquidator);
         vm.expectRevert("Lending: too early");
         lending.liquidateLoan(1);
-        vm.warp(MONTHS_18 + lending.repayGracePeriod() + lending.lenderExclusiveLiquidationPeriod() +  1);
+        vm.warp(MONTHS_18 + lending.repayGracePeriod() + lending.lenderExclusiveLiquidationPeriod() + 1);
         lending.liquidateLoan(1);
         vm.stopPrank();
 

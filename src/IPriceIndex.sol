@@ -8,5 +8,8 @@ interface IPriceIndex {
         uint256 ltv;
     }
 
-    function getValuation(address nftCollection, uint256 tokenId) external view returns (Valuation calldata valuation);
+    function getValuation(address nftCollection, uint256 tokenId)
+        external
+        view
+        returns (Valuation calldata valuation);
 }

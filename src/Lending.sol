@@ -481,7 +481,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         Loan storage loan = loans[_loanId];
 
         require(loan.borrower != address(0) && loan.lender != address(0), "Lending: invalid loan id");
-        require(block.timestamp >= loan.startTime + loan.duration + repayGracePeriod + lenderExclusiveLiquidationPeriod, "Lending: too early");
+        require(
+            block.timestamp >= loan.startTime + loan.duration + repayGracePeriod + lenderExclusiveLiquidationPeriod,
+            "Lending: too early"
+        );
         require(!loan.paid, "Lending: loan already paid");
 
         uint256 totalPayable = loan.amount
@@ -582,7 +585,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
      * @dev Only the admin can call this function
      * @param _lenderExclusiveLiquidationPeriod The new lender exclusive liquidation period
      */
-    function setLenderExclusiveLiquidationPeriod(uint256 _lenderExclusiveLiquidationPeriod) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setLenderExclusiveLiquidationPeriod(uint256 _lenderExclusiveLiquidationPeriod)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         _setLenderExclusiveLiquidationPeriod(_lenderExclusiveLiquidationPeriod);
 
         emit LenderExclusiveLiquidationPeriodSet(_lenderExclusiveLiquidationPeriod);
@@ -849,7 +855,9 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     function _setRanges(uint256[] memory _originationFeeRanges) internal {
         uint256 originationFeeRangesLength = _originationFeeRanges.length;
         require(originationFeeRangesLength > 0, "Lending: cannot be an empty array");
-        require(originationFeeRangesLength <= MAX_ORIGINATION_FEE_RANGES_LENGTH, "Lending: cannot be more than max length");
+        require(
+            originationFeeRangesLength <= MAX_ORIGINATION_FEE_RANGES_LENGTH, "Lending: cannot be more than max length"
+        );
         require(_originationFeeRanges[0] > 0, "Lending: first entry must be greater than 0");
         for (uint256 i = 1; i < originationFeeRangesLength;) {
             require(
@@ -878,8 +886,14 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
      * @param _lenderExclusiveLiquidationPeriod The new lender exclusive liquidation period
      */
     function _setLenderExclusiveLiquidationPeriod(uint256 _lenderExclusiveLiquidationPeriod) internal {
-        require(_lenderExclusiveLiquidationPeriod >= MIN_LENDER_EXCLUSIVE_LIQUIDATION_PERIOD, "Lending: cannot be less than min exclusive period");
-        require(_lenderExclusiveLiquidationPeriod < MAX_LENDER_EXCLUSIVE_LIQUIDATION_PERIOD, "Lending: cannot be more than max exclusive period");
+        require(
+            _lenderExclusiveLiquidationPeriod >= MIN_LENDER_EXCLUSIVE_LIQUIDATION_PERIOD,
+            "Lending: cannot be less than min exclusive period"
+        );
+        require(
+            _lenderExclusiveLiquidationPeriod < MAX_LENDER_EXCLUSIVE_LIQUIDATION_PERIOD,
+            "Lending: cannot be more than max exclusive period"
+        );
 
         lenderExclusiveLiquidationPeriod = _lenderExclusiveLiquidationPeriod;
     }
