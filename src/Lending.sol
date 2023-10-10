@@ -314,7 +314,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
 
     /**
      * @notice Allows a user to request a loan using their NFT as collateral
-     * @custom:use-case If Alice wants to borrow 500.000 USDT for 7 days using her Altr NFT, 
+     * @custom:use-case If Alice wants to borrow 500.000 USDT for 7 days using her Altr NFT,
      * she would call this function
      * @dev Ensures token is allowed, duration is valid, and the NFT has a price valuation
      * @dev Only NFTs from approved collections with a price valuation can be used
