@@ -141,9 +141,18 @@ contract TestLending is Test {
         lending.repayLoan(1);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(borrower) / 1e18, 997_512); // Checked with altr google sheets (1_000_000 - 2_487)
-        assertEq(token.balanceOf(lender) / 1e18, 1_001_733); // Checked with altr google sheets
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 753); // Checked with altr google sheets
+        // interests + protocol fee = borrowAmount * (interestRate + protocol fee) * repaymentDuration / (360 days * 100)
+        // interests + protocol fee = 100_000 * 12.2 * 2_592_000 / (31_104_000 * 100) = 1016.67
+        // penalty + fee = [(loanDuration - repaymentDuration) / loanDuration] * (interests + protocol fee)
+        // penalty + fee = (46_656_000 - 2_592_000) / 46_656_000 * 1016.67 = 960.19
+        // origination fee = borrowAmount * origination fee = 100_000 * ((1 * (5/7)) * 5/7) = 510.20
+        // interests = borrowAmount * interestRate * repaymentDuration / (360 days * 100)
+        // interests = 100_000 * 10.7 * 2_592_000 / (31_104_000 * 100) = 891.67
+        // penalty = [(loanDuration - repaymentDuration) / loanDuration] * interests
+        // penalty = (46_656_000 - 2_592_000) / 46_656_000 * 891.67 = 842.13
+        assertEq(token.balanceOf(borrower) / 1e18, 997_512); // initialBalance - (interest + protocol fee + origination fee + penalty) = 1_000_000 - [1016.67 + 960.19 + 510.20] = 997_512.94
+        assertEq(token.balanceOf(lender) / 1e18, 1_001_733); // intialBalance + interests + penalty = 1_000_000 + 891.67 + 842.13 ~ 1_001_733 
+        assertEq(token.balanceOf(governanceTreasury) / 1e18, 753); // protocol fee + origination fee = [(1016.67-891.67) + (960.19-842.13) + 510.20] = 753.06
 
         assertEq(nft.ownerOf(1), address(borrower));
 
@@ -188,9 +197,19 @@ contract TestLending is Test {
         lending.repayLoan(1);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(borrower) / 1e18, 978_288); // Checked with altr google sheets (1_000_000 - 18_810(interest + fees) - (116_050 * 2.5% = 2_901) grace period fee)
-        assertEq(token.balanceOf(lender) / 1e18, 1_016_050); // Checked with altr google sheets
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 5_661); // Checked with altr google sheets (2760 (fees + spread) + 2901 grace period fee)
+        // interests + protocol fee = borrowAmount * (interestRate + protocol fee) * repaymentDuration / (360 days * 100)
+        // interests + protocol fee = 100_000 * 12.2 * 46_656_000 / (31_104_000 * 100) = 18_300
+        // penalty + fee = [(loanDuration - repaymentDuration) / loanDuration] * (interests + protocol fee)
+        // penalty + fee = 0 / 46_656_000 * 18_300 = 0
+        // origination fee = borrowAmount * origination fee = 100_000 * ((1 * (5/7)) * 5/7) = 510.20
+        // interests = borrowAmount * interestRate * repaymentDuration / (360 days * 100)
+        // interests = 100_000 * 10.7 * 46_656_000 / (31_104_000 * 100) = 16_050
+        // penalty = [(loanDuration - repaymentDuration) / loanDuration] * interests
+        // penalty = 0 / 46_656_000 * 891.67 = 0
+        // grace period fee = (borrowAmount + interests) * grace period fee / 100 = (100_000 + 16_050) * 2.5 / 100 = 2_901.25
+        assertEq(token.balanceOf(borrower) / 1e18, 978_288); // initialBalance - (interests + protocol fee + origination fee + repay grace fee) = 1_000_000 - (18_300 + 510.20 + 2901.25) = 978_288.55
+        assertEq(token.balanceOf(lender) / 1e18, 1_016_050); // intialBalance + interests + penalty = 1_000_000 + 16_050 + 0 = 1_016_050
+        assertEq(token.balanceOf(governanceTreasury) / 1e18, 5_661); // protocol fee + origination fee + repay grace period fee = (18_300 - 16_050) + 510.20 + 2901.25 = 5_661.45
 
         assertEq(nft.ownerOf(1), address(borrower));
     }
@@ -354,10 +373,20 @@ contract TestLending is Test {
         lending.liquidateLoan(1);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(borrower) / 1e18, 1_100_000); // 1_000_000 pre-owned + 100_000 borrowed
-        assertEq(token.balanceOf(lender) / 1e18, 1_016_050); // Checked with altr google sheets
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 7_760); // Checked with altr google sheets (2760 (fees + spread) + (100_000 * 5% = 5000) liquidation fee)
-        assertEq(token.balanceOf(liquidator) / 1e18, 876_189); // Checked with altr google sheets (1_000_000 - (116_050 repay borrower debt + 2760 (fees + spread)) + 5000 liquidation fee)
+        // interests + protocol fee = borrowAmount * (interestRate + protocol fee) * repaymentDuration / (360 days * 100)
+        // interests + protocol fee = 100_000 * 12.2 * 46_656_000 / (31_104_000 * 100) = 18_300
+        // penalty + fee = [(loanDuration - repaymentDuration) / loanDuration] * (interests + protocol fee)
+        // penalty + fee = 0 / 46_656_000 * 18_300 = 0
+        // origination fee = borrowAmount * origination fee = 100_000 * ((1 * (5/7)) * 5/7) = 510.20
+        // interests = borrowAmount * interestRate * repaymentDuration / (360 days * 100)
+        // interests = 100_000 * 10.7 * 46_656_000 / (31_104_000 * 100) = 16_050
+        // penalty = [(loanDuration - repaymentDuration) / loanDuration] * interests
+        // penalty = 0 / 46_656_000 * 891.67 = 0
+        // liquidation fee = borrowAmount * liquidation fee % / 100  = 100_000 * 5 / 100 = 5_000
+        assertEq(token.balanceOf(borrower) / 1e18, 1_100_000); // initalBalance + borrowAmount = 1_000_000 + 100_000
+        assertEq(token.balanceOf(lender) / 1e18, 1_016_050); // initalBalance + interests + penalty = 1_000_000 + 16_050 + 0
+        assertEq(token.balanceOf(governanceTreasury) / 1e18, 7_760); // protocol fee + origination fee + liquidation fee = 18_300 - 16_050 + 510 + 5000 = 7_760
+        assertEq(token.balanceOf(liquidator) / 1e18, 876_189); // initialBalance - (borrowAmount + interests + protocol fee + origination fee + liquidation fee) = 1_000_000 - (100_000 + 18_300 + 510.20 + 5000) = 876_189.80
 
         assertEq(nft.ownerOf(1), address(liquidator));
     }
