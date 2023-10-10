@@ -17,7 +17,6 @@ contract DeployLending is Script {
         uint256 protocolFee = 150; // 1.5%
         uint256 repayGracePeriod = 60 * 60 * 24 * 5; // 5 days
         uint256 repayGraceFee = 250; // 2.5%
-        uint256 feeReductionFactor = 14000; // 140%
         uint256[] memory originationFeeRanges = new uint256[](3);
         originationFeeRanges[0] = 50_000; // 50k
         originationFeeRanges[1] = 100_000; // 100k
@@ -36,6 +35,7 @@ contract DeployLending is Script {
         interestRates[3] = 880; // 8.8 %
         interestRates[4] = 970; // 9.7 %
         uint256 baseOriginationFee = 100; // 1%
+        uint256 lenderExclusiveLiquidationPeriod = 2 days;
 
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         console.log("Deploying Lending contract...");
@@ -47,11 +47,11 @@ contract DeployLending is Script {
             repayGracePeriod,
             repayGraceFee,
             originationFeeRanges,
-            feeReductionFactor,
             liquidationFee,
             durations,
             interestRates,
-            baseOriginationFee
+            baseOriginationFee,
+            lenderExclusiveLiquidationPeriod
         );
         lending.grantRole(lending.TREASURY_MANAGER_ROLE(), TREASURY_MANAGER);
         vm.stopBroadcast();

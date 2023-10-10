@@ -21,6 +21,8 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     uint256 public constant SECONDS_IN_YEAR = 360 days;
     uint256 public constant MIN_GRACE_PERIOD = 2 days;
     uint256 public constant MAX_GRACE_PERIOD = 15 days;
+    uint256 public constant MIN_LENDER_EXCLUSIVE_LIQUIDATION_PERIOD = 1 days;
+    uint256 public constant MAX_LENDER_EXCLUSIVE_LIQUIDATION_PERIOD = 5 days;
     uint256 public constant VALUATION_EXPIRY = 150 days;
     uint256 public constant PRECISION = 10000;
     uint256 public constant MAX_PROTOCOL_FEE = 400; // 4%
@@ -95,6 +97,11 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
      * @notice Base origination fee based on loan amount
      */
     uint256 public baseOriginationFee;
+
+    /**
+     * @notice Lender exclusive liquidation period in seconds
+     */
+    uint256 public lenderExclusiveLiquidationPeriod;
 
     /**
      * @notice ID for the last created loan
@@ -259,6 +266,12 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     event FeeReductionFactorSet(uint256 feeReductionFactor);
 
     /**
+     * @notice Emitted when lenderExclusiveLiquidationPeriodSet is updated
+     * @param lenderExclusiveLiquidationPeriod The new lender exclusive liquidation period
+     */
+    event LenderExclusiveLiquidationPeriodSet(uint256 lenderExclusiveLiquidationPeriod);
+
+    /**
      * @notice Contract constructor
      * @param _priceIndex Price index contract address
      * @param _governanceTreasury Governance treasury contract address
@@ -266,11 +279,11 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
      * @param _gracePeriod Grace period in seconds
      * @param _repayGraceFee Repay grace fee in %
      * @param _originationFeeRanges Origination fee ranges
-     * @param _feeReductionFactor Origination fee reduction factor in %
      * @param _liquidationFee Liquidation fee in %
      * @param _durations Array of allowed loan durations
      * @param _interestRates Array of interest rates corresponding to each duration
      * @param _baseOriginationFee Base origination fee to reduce based on origination fee ranges
+     * @param _lenderExclusiveLiquidationPeriod Lender exclusive liquidation period in seconds
      */
     constructor(
         address _priceIndex,
@@ -279,11 +292,11 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         uint256 _gracePeriod,
         uint256 _repayGraceFee,
         uint256[] memory _originationFeeRanges,
-        uint256 _feeReductionFactor,
         uint256 _liquidationFee,
         uint256[] memory _durations,
         uint256[] memory _interestRates,
-        uint256 _baseOriginationFee
+        uint256 _baseOriginationFee,
+        uint256 _lenderExclusiveLiquidationPeriod
     ) {
         _setProtocolFee(_protocolFee);
         _setRepayGracePeriod(_gracePeriod);
@@ -294,7 +307,8 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         _setLoanTypes(_durations, _interestRates);
         _setBaseOriginationFee(_baseOriginationFee);
         _setRanges(_originationFeeRanges);
-        _setFeeReductionFactor(_feeReductionFactor);
+        _setFeeReductionFactor(14000);
+        _setLenderExclusiveLiquidationPeriod(_lenderExclusiveLiquidationPeriod);
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
@@ -467,7 +481,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         Loan storage loan = loans[_loanId];
 
         require(loan.borrower != address(0) && loan.lender != address(0), "Lending: invalid loan id");
-        require(block.timestamp >= loan.startTime + loan.duration + repayGracePeriod, "Lending: too early");
+        require(block.timestamp >= loan.startTime + loan.duration + repayGracePeriod + lenderExclusiveLiquidationPeriod, "Lending: too early");
         require(!loan.paid, "Lending: loan already paid");
 
         uint256 totalPayable = loan.amount
@@ -561,6 +575,17 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         _setBaseOriginationFee(_fee);
 
         emit BaseOriginationFeeSet(_fee);
+    }
+
+    /**
+     * @notice Sets the lender exclusive liquidation period
+     * @dev Only the admin can call this function
+     * @param _lenderExclusiveLiquidationPeriod The new lender exclusive liquidation period
+     */
+    function setLenderExclusiveLiquidationPeriod(uint256 _lenderExclusiveLiquidationPeriod) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _setLenderExclusiveLiquidationPeriod(_lenderExclusiveLiquidationPeriod);
+
+        emit LenderExclusiveLiquidationPeriodSet(_lenderExclusiveLiquidationPeriod);
     }
 
     /**
@@ -846,5 +871,16 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         require(_factor >= PRECISION, "Lending: fee reduction factor cannot be less than PRECISION");
 
         feeReductionFactor = _factor;
+    }
+
+    /**
+     * @notice Internal function to set new lender exclusive liquidation period
+     * @param _lenderExclusiveLiquidationPeriod The new lender exclusive liquidation period
+     */
+    function _setLenderExclusiveLiquidationPeriod(uint256 _lenderExclusiveLiquidationPeriod) internal {
+        require(_lenderExclusiveLiquidationPeriod >= MIN_LENDER_EXCLUSIVE_LIQUIDATION_PERIOD, "Lending: cannot be less than min exclusive period");
+        require(_lenderExclusiveLiquidationPeriod < MAX_LENDER_EXCLUSIVE_LIQUIDATION_PERIOD, "Lending: cannot be more than max exclusive period");
+
+        lenderExclusiveLiquidationPeriod = _lenderExclusiveLiquidationPeriod;
     }
 }

@@ -33,7 +33,6 @@ contract TestLending is Test {
         uint256 protocolFee = 150; // 1.5%
         uint256 repayGracePeriod = 60 * 60 * 24 * 5; // 5 days
         uint256 repayGraceFee = 250; // 2.5
-        uint256 feeReductionFactor = 14000; // 140%
         uint256[] memory originationFeeRanges = new uint256[](3);
         originationFeeRanges[0] = 50_000; // 50k
         originationFeeRanges[1] = 100_000; // 100k
@@ -54,6 +53,7 @@ contract TestLending is Test {
         interestRates[4] = 970; // 9.7%
         interestRates[5] = 1070; // 10.7% 
         uint256 baseOriginationFee = 100; // 1%
+        uint256 lenderExclusiveLiquidationPeriod = 2 days;
 
         priceIndex = new TestPriceIndex();
         lending = new Lending(
@@ -63,11 +63,11 @@ contract TestLending is Test {
             repayGracePeriod,
             repayGraceFee,
             originationFeeRanges,
-            feeReductionFactor,
             liquidationFee,
             durations,
             interestRates,
-            baseOriginationFee
+            baseOriginationFee,
+            lenderExclusiveLiquidationPeriod
         );
         lending.grantRole(lending.TREASURY_MANAGER_ROLE(), treasuryManager);
         token = new TestERC20();
@@ -233,6 +233,13 @@ contract TestLending is Test {
         lending.setPriceIndex(borrower);
         lending.setPriceIndex(address(priceIndex));
         assertEq(address(lending.priceIndex()), address(priceIndex));
+
+        vm.expectRevert("Lending: cannot be less than min exclusive period");
+        lending.setLenderExclusiveLiquidationPeriod(1 days - 1);
+        vm.expectRevert("Lending: cannot be more than max exclusive period");
+        lending.setLenderExclusiveLiquidationPeriod(5 days + 1);
+        lending.setLenderExclusiveLiquidationPeriod(4 days);
+        assertEq(lending.lenderExclusiveLiquidationPeriod(), 4 days);
         vm.stopPrank();
 
         vm.startPrank(treasuryManager);
@@ -340,6 +347,9 @@ contract TestLending is Test {
         vm.expectRevert("Lending: too early");
         lending.liquidateLoan(1);
         vm.warp(MONTHS_18 + lending.repayGracePeriod() + 1);
+        vm.expectRevert("Lending: too early");
+        lending.liquidateLoan(1);
+        vm.warp(MONTHS_18 + lending.repayGracePeriod() + lending.lenderExclusiveLiquidationPeriod() + 1);
         lending.liquidateLoan(1);
         vm.expectRevert("Lending: loan already paid");
         lending.liquidateLoan(1);
@@ -538,7 +548,9 @@ contract TestLending is Test {
         vm.stopPrank();
 
         vm.startPrank(liquidator);
-        vm.warp(MONTHS_18 + lending.repayGracePeriod() + 1);
+        vm.expectRevert("Lending: too early");
+        lending.liquidateLoan(1);
+        vm.warp(MONTHS_18 + lending.repayGracePeriod() + lending.lenderExclusiveLiquidationPeriod() +  1);
         lending.liquidateLoan(1);
         vm.stopPrank();
 
