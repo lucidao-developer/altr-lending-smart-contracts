@@ -11,7 +11,7 @@ import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Recei
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
-import {UD60x18, ud, convert} from "@prb/math/src/UD60x18.sol";
+import {UD60x18, ud, convert, ceil} from "@prb/math/src/UD60x18.sol";
 import {IPriceIndex} from "./IPriceIndex.sol";
 
 contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
@@ -709,7 +709,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
             convert(_borrowedAmount * _apr * _repaymentDuration).div(convert(SECONDS_IN_YEAR * PRECISION));
         UD60x18 penaltyFactor = convert(_loanDuration - _repaymentDuration).div(convert(_loanDuration));
 
-        return convert(accruedDebt.add(accruedDebt.mul(penaltyFactor)));
+        return convert(ceil(accruedDebt.add(accruedDebt.mul(penaltyFactor))));
     }
 
     /**
