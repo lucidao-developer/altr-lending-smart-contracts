@@ -109,8 +109,13 @@ contract TestLending is Test {
 
     function testLending() public {
         uint256 borrowAmount = 100_000e18;
+        vm.startPrank(admin);
+        lending.disallowNFT(address(nft), 2);
+        vm.stopPrank();
 
         vm.startPrank(borrower);
+        vm.expectRevert("Lending: cannot use this NFT as collateral");
+        lending.requestLoan(address(token), 100, address(nft), 2, MONTHS_18, MONTHS_18);
         vm.expectRevert("Lending: borrow token not allowed");
         lending.requestLoan(address(0), borrowAmount, address(nft), 1, MONTHS_18, MONTHS_18);
         vm.expectRevert("Lending: invalid duration");
@@ -139,6 +144,7 @@ contract TestLending is Test {
         address[] memory tokens = new address[](1);
         tokens[0] = address(token);
         lending.unsetTokens(tokens);
+        lending.disallowNFT(address(nft), 1);
         vm.stopPrank();
 
         vm.startPrank(lender);
@@ -148,6 +154,15 @@ contract TestLending is Test {
 
         vm.startPrank(admin);
         lending.setTokens(tokens);
+        vm.stopPrank();
+
+        vm.startPrank(lender);
+        vm.expectRevert("Lending: cannot use this NFT as collateral");
+        lending.acceptLoan(1);
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        lending.allowNFT(address(nft), 1);
         vm.stopPrank();
 
         vm.startPrank(lender);
@@ -174,6 +189,10 @@ contract TestLending is Test {
         assertEq(token.balanceOf(governanceTreasury) / 1e18, 753); // protocol fee + origination fee = [(1016.67-891.67) + (960.19-842.13) + 510.20] = 753.06
 
         assertEq(nft.ownerOf(1), address(borrower));
+
+        vm.startPrank(admin);
+        lending.allowNFT(address(nft), 2);
+        vm.stopPrank();
 
         vm.startPrank(borrower);
         vm.warp(6 * MONTHS_1);

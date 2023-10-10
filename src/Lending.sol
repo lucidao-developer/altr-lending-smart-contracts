@@ -123,6 +123,11 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     mapping(uint256 => uint256) public aprFromDuration; // apr in %
 
     /**
+     * @notice Mapping to prevent some NFTs from being used as collateral
+     */
+    mapping(address => mapping(uint256 => bool)) public disallowedNFTs;
+
+    /**
      * @notice Emitted when a loan is created
      * @param loanId The unique identifier of the created loan
      * @param borrower The address of the borrower
@@ -271,6 +276,20 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     event LenderExclusiveLiquidationPeriodSet(uint256 lenderExclusiveLiquidationPeriod);
 
     /**
+     * @notice Emitted when a new NFT is added to disallowedNFTs
+     * @param collectionAddress The collection address of the NFT to disallow
+     * @param tokenId The token id of the NFT to disallow
+     */
+    event NFTAllowed(address collectionAddress, uint256 tokenId);
+
+    /**
+     * @notice Emitted when a new NFT is removed from disallowNFTs
+     * @param collectionAddress The collection address of the NFT to allow
+     * @param tokenId The token id of the NFT to allow
+     */
+    event NFTDisallowed(address collectionAddress, uint256 tokenId);
+
+    /**
      * @notice Contract constructor
      * @param _priceIndex Price index contract address
      * @param _governanceTreasury Governance treasury contract address
@@ -341,6 +360,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
             _nftCollection.supportsInterface(type(IERC721).interfaceId),
             "Lending: collection does not support IERC721 interface"
         );
+        require(!disallowedNFTs[_nftCollection][_nftId], "Lending: cannot use this NFT as collateral");
 
         IPriceIndex.Valuation memory valuation = priceIndex.getValuation(_nftCollection, _nftId);
 
@@ -409,6 +429,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         require(!loan.cancelled, "Lending: loan cancelled");
         require(loan.deadline > block.timestamp, "Lending: loan acceptance deadline passed");
         require(allowedTokens[loan.token], "Lending: borrow token not allowed");
+        require(!disallowedNFTs[loan.nftCollection][loan.nftId], "Lending: cannot use this NFT as collateral");
 
         loan.lender = msg.sender;
         loan.startTime = block.timestamp;
@@ -642,6 +663,30 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     }
 
     /**
+     * @notice Allows the contract admin to prevent an NFT from being used as collateral
+     * @dev Only the admin can call this function
+     * @param _collectionAddress The collection address of the NFT to disallow
+     * @param _tokenId The token id of the NFT to disallow
+     */
+    function disallowNFT(address _collectionAddress, uint256 _tokenId) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        disallowedNFTs[_collectionAddress][_tokenId] = true;
+
+        emit NFTDisallowed(_collectionAddress, _tokenId);
+    }
+
+    /**
+     * @notice Allows the contract admin to allow again an NFT to be used as collateral
+     * @dev Only the admin can call this function
+     * @param _collectionAddress The collection address of the NFT to allow
+     * @param _tokenId The token id of the NFT to allow
+     */
+    function allowNFT(address _collectionAddress, uint256 _tokenId) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        disallowedNFTs[_collectionAddress][_tokenId] = false;
+
+        emit NFTAllowed(_collectionAddress, _tokenId);
+    }
+
+    /**
      * @notice Sets the available loan types by specifying the duration and interest rate
      * @dev Only the admin can call this function. The lengths of _durations and _interestRates arrays must be equal
      * @param _durations Array of loan durations
@@ -699,11 +744,11 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
      * @notice Retrieves the loan details for a specific loan ID
      * @dev Anyone can call this function
      * @dev This function can return uninitialized loans if called with indices greater than lastLoanId
-     * @param loanId The ID of the loan
+     * @param _loanId The ID of the loan
      * @return loan The loan structure containing the details of the loan
      */
-    function getLoan(uint256 loanId) external view returns (Loan memory loan) {
-        return loans[loanId];
+    function getLoan(uint256 _loanId) external view returns (Loan memory loan) {
+        return loans[_loanId];
     }
 
     /**
@@ -720,14 +765,14 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
      * @param _amount The loan amount
      * @return uint256 The origination fee
      */
-    function getOriginationFee(uint256 _amount, address token) public view returns (uint256) {
+    function getOriginationFee(uint256 _amount, address _token) public view returns (uint256) {
         UD60x18 originationFee = convert(baseOriginationFee);
         UD60x18 factor = convert(feeReductionFactor);
         UD60x18 precision = convert(PRECISION);
 
         uint256 originationFeeRangesLength = originationFeeRanges.length;
         for (uint256 i = 0; i < originationFeeRangesLength;) {
-            if (_amount < originationFeeRanges[i] * (10 ** ERC20(token).decimals())) {
+            if (_amount < originationFeeRanges[i] * (10 ** ERC20(_token).decimals())) {
                 break;
             } else {
                 originationFee = originationFee.mul(precision).div(factor);
