@@ -9,11 +9,12 @@ import "forge-std/StdUtils.sol";
 contract DeployLending is Script {
     uint256 immutable WEEK_1 = 7 * 60 * 60 * 24;
     uint256 immutable MONTHS_1 = 60 * 60 * 24 * 30;
+    address GOVERNANCE_TREASURY_ADDRESS = vm.envAddress("GovernanceTreasuryAddress");
+    address PRICE_INDEX_ADDRESS = vm.envAddress("PriceIndexAddress");
+    address ALLOW_LIST_ADDRESS = vm.envAddress("AllowListAddress");
+    address TREASURY_MANAGER = vm.envAddress("TreasuryManager");
 
     function run() external {
-        address GOVERNANCE_TREASURY_ADDRESS = vm.envAddress("GovernanceTreasuryAddress");
-        address PRICE_INDEX_ADDRESS = vm.envAddress("PriceIndexAddress");
-        address TREASURY_MANAGER = vm.envAddress("TreasuryManager");
         uint256 protocolFee = 150; // 1.5%
         uint256 repayGracePeriod = 60 * 60 * 24 * 5; // 5 days
         uint256 repayGraceFee = 250; // 2.5%
@@ -36,23 +37,13 @@ contract DeployLending is Script {
         interestRates[4] = 970; // 9.7 %
         uint256 baseOriginationFee = 100; // 1%
         uint256 lenderExclusiveLiquidationPeriod = 2 days;
+        uint256 feeReductionFactor = 14_000; // 140%
 
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         console.log("Deploying Lending contract...");
         vm.startBroadcast(deployerPrivateKey);
-        Lending lending = new Lending(
-            PRICE_INDEX_ADDRESS,
-            GOVERNANCE_TREASURY_ADDRESS,
-            protocolFee,
-            repayGracePeriod,
-            repayGraceFee,
-            originationFeeRanges,
-            liquidationFee,
-            durations,
-            interestRates,
-            baseOriginationFee,
-            lenderExclusiveLiquidationPeriod
-        );
+        Lending.ConstructorParams memory lendingParams = Lending.ConstructorParams(PRICE_INDEX_ADDRESS, GOVERNANCE_TREASURY_ADDRESS, ALLOW_LIST_ADDRESS, protocolFee, repayGracePeriod, repayGraceFee, originationFeeRanges, liquidationFee, durations, interestRates, baseOriginationFee, lenderExclusiveLiquidationPeriod, feeReductionFactor);
+        Lending lending = new Lending(lendingParams);
         lending.grantRole(lending.TREASURY_MANAGER_ROLE(), TREASURY_MANAGER);
         vm.stopBroadcast();
         console.log("Lending contract successfully deplyed at: ", address(lending));

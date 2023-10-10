@@ -7,6 +7,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestERC721} from "../src/test/TestERC721.sol";
 import {IPriceIndex} from "../src/IPriceIndex.sol";
 import {TestPriceIndex} from "../src/test/TestPriceIndex.sol";
+import {TestAllowList} from "../src/test/TestAllowList.sol";
 
 contract TestLending is Test {
     uint256 immutable WEEK_1 = 7 * 60 * 60 * 24;
@@ -19,12 +20,14 @@ contract TestLending is Test {
     Lending public lending;
     TestERC721 public nft;
     TestPriceIndex public priceIndex;
+    TestAllowList public allowList;
 
     address admin = address(0x1);
     address borrower = address(0x2);
     address lender = address(0x3);
     address governanceTreasury = address(0x4);
     address liquidator = address(0x5);
+    address nonAllowed = address(0x6);
     address treasuryManager = address(0xDA0);
 
     constructor(Lending _lending, TestERC721 _nft, TestPriceIndex _priceIndex, uint256 _decimals) {
@@ -39,6 +42,17 @@ contract TestLending is Test {
         uint256 borrowAmount = 100_000 * DECIMALS;
         vm.startPrank(admin);
         lending.disallowNFT(address(nft), 2);
+        vm.stopPrank();
+
+        vm.startPrank(nonAllowed);
+        vm.expectRevert("Lending: address not allowed");
+        lending.requestLoan(address(token), 0, address(nft), 0, MONTHS_18, MONTHS_18);
+        vm.expectRevert("Lending: address not allowed");
+        lending.acceptLoan(0);
+        vm.expectRevert("Lending: address not allowed");
+        lending.repayLoan(0);
+        vm.expectRevert("Lending: address not allowed");
+        lending.liquidateLoan(0);
         vm.stopPrank();
 
         vm.startPrank(borrower);
@@ -239,6 +253,13 @@ contract TestLending is Test {
         lending.setPriceIndex(borrower);
         lending.setPriceIndex(address(priceIndex));
         assertEq(address(lending.priceIndex()), address(priceIndex));
+
+        vm.expectRevert("Lending: cannot be null address");
+        lending.setAllowList(address(0));
+        vm.expectRevert("Lending: does not support IAllowList interface");
+        lending.setAllowList(borrower);
+        lending.setAllowList(address(allowList));
+        assertEq(address(lending.allowList()), address(allowList));
 
         vm.expectRevert("Lending: cannot be less than min exclusive period");
         lending.setLenderExclusiveLiquidationPeriod(1 days - 1);
