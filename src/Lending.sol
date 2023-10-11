@@ -431,6 +431,9 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         require(allowedTokens[loan.token], "Lending: borrow token not allowed");
         require(!disallowedNFTs[loan.nftCollection][loan.nftId], "Lending: cannot use this NFT as collateral");
 
+        IPriceIndex.Valuation memory valuation = priceIndex.getValuation(loan.nftCollection, loan.nftId);
+        require((valuation.price * (10 ** ERC20(loan.token).decimals()) * valuation.ltv) / 100 >= loan.amount, "Lending: loan undercollateralized");
+
         loan.lender = msg.sender;
         loan.startTime = block.timestamp;
 

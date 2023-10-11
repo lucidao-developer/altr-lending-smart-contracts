@@ -136,6 +136,23 @@ contract TestLending is Test {
         vm.expectRevert("Lending: ltv greater than max");
         lending.requestLoan(address(token), borrowAmount, address(nft), 2, MONTHS_18, MONTHS_18);
         vm.stopPrank();
+
+        vm.startPrank(admin);
+        priceIndex.setValuation(address(nft), 2, 200_000, 50);
+        vm.stopPrank();
+
+        vm.startPrank(borrower);
+        lending.requestLoan(address(token), borrowAmount, address(nft), 2, MONTHS_18, MONTHS_18);
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        priceIndex.setValuation(address(nft), 2, 100_000, 50);
+        vm.stopPrank();
+
+        vm.startPrank(borrower);
+        vm.expectRevert("Lending: loan undercollateralized");
+        lending.acceptLoan(2);
+        vm.stopPrank();
     }
 
     function gracePeriod(IERC20 token) public {
