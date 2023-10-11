@@ -9,6 +9,7 @@ import {IPriceIndex} from "../src/IPriceIndex.sol";
 import {TestPriceIndex} from "../src/test/TestPriceIndex.sol";
 import {TestLending} from "./Lending.t.sol";
 import {IUSDCPolygon} from "../src/test/IUSDCPolygon.sol";
+import {TestAllowList} from "../src/test/TestAllowList.sol";
 
 contract TestUSDTPolygon is Test {
     uint256 immutable WEEK_1 = 7 * 60 * 60 * 24;
@@ -24,6 +25,7 @@ contract TestUSDTPolygon is Test {
     TestERC721 public nft;
     TestPriceIndex public priceIndex;
     TestLending public test;
+    TestAllowList public allowList;
 
     address admin = address(0x1);
     address borrower = address(0x2);
@@ -58,21 +60,12 @@ contract TestUSDTPolygon is Test {
         interestRates[5] = 1070; // 10.7%
         uint256 baseOriginationFee = 100; // 1%
         uint256 lenderExclusiveLiquidationPeriod = 2 days;
+        uint256 feeReductionFactor = 14_000; // 140%
 
+        allowList = new TestAllowList();
         priceIndex = new TestPriceIndex();
-        lending = new Lending(
-            address(priceIndex),
-            governanceTreasury,
-            protocolFee,
-            repayGracePeriod,
-            repayGraceFee,
-            originationFeeRanges,
-            liquidationFee,
-            durations,
-            interestRates,
-            baseOriginationFee,
-            lenderExclusiveLiquidationPeriod
-        );
+        Lending.ConstructorParams memory lendingParams = Lending.ConstructorParams(address(priceIndex), governanceTreasury, address(allowList), protocolFee, repayGracePeriod, repayGraceFee, originationFeeRanges, liquidationFee, durations, interestRates, baseOriginationFee, lenderExclusiveLiquidationPeriod, feeReductionFactor);
+        lending = new Lending(lendingParams);
         lending.grantRole(lending.TREASURY_MANAGER_ROLE(), treasuryManager);
 
         address usdcAddress = deployCode("USDCPolygon.sol:FiatTokenV2");
@@ -102,6 +95,12 @@ contract TestUSDTPolygon is Test {
 
         priceIndex.setValuation(address(0xC0113C71), 0, 1000, 50);
 
+        address[] memory allowedAddresses = new address[](4);
+        allowedAddresses[0] = borrower;
+        allowedAddresses[1] = lender;
+        allowedAddresses[2] = liquidator;
+        allowedAddresses[3] = admin;
+        allowList.allowAddresses(allowedAddresses);
         vm.stopPrank();
 
         vm.startPrank(borrower);
@@ -117,7 +116,7 @@ contract TestUSDTPolygon is Test {
         token.approve(address(lending), 2 ** 256 - 1);
         vm.stopPrank();
 
-        test = new TestLending(lending, nft, priceIndex, 6);
+        test = new TestLending(lending, nft, priceIndex, allowList, 6);
     }
 
     function testLending() public {
