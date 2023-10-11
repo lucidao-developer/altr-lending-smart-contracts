@@ -10,6 +10,12 @@
 
 This repository contains a Solidity-based smart contract for decentralized lending. It allows users to borrow and lend tokens against NFT collateral. The contract includes features like liquidation, interest rate calculation, and protocol fees.
 
+User documentation for the protocol can be found at:
+[https://docs.lucidao.com/dapps/altr-lending]
+
+Most of the quirks of the platform are explained in the FAQ section:
+[https://docs.lucidao.com/dapps/altr-lending/faq]
+
 ## Prerequisites
 
 - Docker
@@ -24,14 +30,19 @@ cd altr-lending-smart-contracts
 ```
 
 ### Build Docker image
+
 Open your terminal and run the following command:
+
 ```bash
 docker build --no-cache --progress=plain -t altr-contracts .
 ```
+
 This will build a docker image with all the dependencies needed to interact with the project.
 
 ### Setup docker shell
+
 To access the docker shell run:
+
 ```bash
 docker run -it -p 3000:3000 altr-contracts sh
 ```
@@ -82,4 +93,4 @@ This will output the documentation in the docs folder and serve it on the specif
 
 This project has been built with the help of:
 
- [![GitHub](https://img.shields.io/badge/GitHub-NeoBase-blue)](https://github.com/neobase-one)
+[![GitHub](https://img.shields.io/badge/GitHub-NeoBase-blue)](https://github.com/neobase-one)
