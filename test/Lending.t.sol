@@ -42,6 +42,10 @@ contract TestLending is Test {
         vm.stopPrank();
 
         vm.startPrank(borrower);
+        vm.expectRevert("Lending: only the contract itself can call this function");
+        lending.attemptTransfer(address(token), borrower, lender, 100);
+        vm.expectRevert("Lending: you have no stuck tokens");
+        lending.withdrawStuckToken(address(token));
         vm.expectRevert("Lending: cannot use this NFT as collateral");
         lending.requestLoan(address(token), 100, address(nft), 2, MONTHS_18, MONTHS_18);
         vm.expectRevert("Lending: borrow token not allowed");

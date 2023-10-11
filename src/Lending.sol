@@ -128,6 +128,11 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     mapping(address => mapping(uint256 => bool)) public disallowedNFTs;
 
     /**
+     * @notice Mapping to store stuck token amount for user for every token
+     */
+    mapping(address => mapping(address => uint256)) public stuckToken;
+
+    /**
      * @notice Emitted when a loan is created
      * @param loanId The unique identifier of the created loan
      * @param borrower The address of the borrower
@@ -432,7 +437,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         require(!disallowedNFTs[loan.nftCollection][loan.nftId], "Lending: cannot use this NFT as collateral");
 
         IPriceIndex.Valuation memory valuation = priceIndex.getValuation(loan.nftCollection, loan.nftId);
-        require((valuation.price * (10 ** ERC20(loan.token).decimals()) * valuation.ltv) / 100 >= loan.amount, "Lending: loan undercollateralized");
+        require(
+            (valuation.price * (10 ** ERC20(loan.token).decimals()) * valuation.ltv) / 100 >= loan.amount,
+            "Lending: loan undercollateralized"
+        );
 
         loan.lender = msg.sender;
         loan.startTime = block.timestamp;
@@ -467,7 +475,13 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
 
         loan.paid = true;
 
-        ERC20(loan.token).safeTransferFrom(msg.sender, loan.lender, lenderPayable);
+        try this.attemptTransfer(loan.token, msg.sender, loan.lender, lenderPayable) {}
+        catch {
+            uint256 balanceBefore = ERC20(loan.token).balanceOf(address(this));
+            ERC20(loan.token).safeTransferFrom(msg.sender, address(this), lenderPayable);
+            uint256 balanceAfter = ERC20(loan.token).balanceOf(address(this));
+            stuckToken[loan.token][loan.lender] += balanceAfter - balanceBefore;
+        }
 
         if (block.timestamp > loan.startTime + loan.duration) {
             platformFee += (lenderPayable * repayGraceFee) / PRECISION;
@@ -538,6 +552,35 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         IERC721(loan.nftCollection).safeTransferFrom(address(this), msg.sender, loan.nftId);
 
         emit LoanLiquidated(_loanId, msg.sender, totalPayable, totalPayable - lenderPayable);
+    }
+
+    /**
+     * @notice Allows a lender to withdraw their stuck tokens if something fails during repayment
+     * @custom:use-case If Alice repay her loan but for some reason the token transfer to the lender fails, 
+     * the contract transfer those tokens on the contract itself and than the lender can try to solve the 
+     * problem and withdraw the tokens when fixed using this function
+     * @param token The address of the tokens that are stucked into the contract
+     */
+    function withdrawStuckToken(address token) external {
+        uint256 stuckTokenAmount = stuckToken[token][msg.sender];
+        require(stuckTokenAmount > 0, "Lending: you have no stuck tokens");
+
+        delete stuckToken[token][msg.sender];
+        
+        ERC20(token).approve(msg.sender, stuckTokenAmount);
+    }
+
+    /**
+     * @notice Wrapper function to enable the try/catch constructor for the safeTransferFrom function
+     * @dev Only the contract itself can call this function
+     * @param token The token to attempt transfer
+     * @param origin The address to transfer the token from
+     * @param beneficiary The address to transfer the token to
+     * @param amount The amount of token to transfer
+     */
+    function attemptTransfer(address token, address origin, address beneficiary, uint256 amount) external {
+        require(msg.sender == address(this), "Lending: only the contract itself can call this function");
+        ERC20(token).safeTransferFrom(origin, beneficiary, amount);
     }
 
     /**

@@ -16,9 +16,11 @@ contract TestUSDTPolygon is Test {
     uint256 immutable MONTHS_18 = 60 * 60 * 24 * 540;
 
     uint256 immutable INITIAL_TOKENS = 1_000_000e6;
+    uint256 immutable DECIMALS = 10**6;
 
     Lending public lending;
     IERC20 public token;
+    IUSDCPolygon public usdc;
     TestERC721 public nft;
     TestPriceIndex public priceIndex;
     TestLending public test;
@@ -74,7 +76,7 @@ contract TestUSDTPolygon is Test {
         lending.grantRole(lending.TREASURY_MANAGER_ROLE(), treasuryManager);
 
         address usdcAddress = deployCode("USDCPolygon.sol:FiatTokenV2");
-        IUSDCPolygon usdc = IUSDCPolygon(usdcAddress);
+        usdc = IUSDCPolygon(usdcAddress);
         token = IERC20(usdcAddress);
         usdc.initialize("USDCPolygon", "USDC", "USD", 6, admin, admin, admin, admin);
         usdc.initializeV2("USDCPolygon");
@@ -156,5 +158,48 @@ contract TestUSDTPolygon is Test {
 
     function testZFuzz_Liquidate(uint256 amount) public {
         test.zFuzz_Liquidate(token, amount);
+    }
+
+    function testBlacklist() public {
+        uint256 borrowAmount = 100_000 * DECIMALS;
+        vm.startPrank(borrower);
+        lending.requestLoan(address(token), borrowAmount, address(nft), 1, MONTHS_18, MONTHS_18);
+        vm.stopPrank();
+
+        vm.startPrank(lender);
+        lending.acceptLoan(1);
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        usdc.blacklist(lender);
+        vm.stopPrank();
+        
+        vm.warp(MONTHS_1);
+
+        vm.startPrank(borrower);
+        lending.repayLoan(1);
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(borrower) / DECIMALS, 997_512); 
+        assertEq(token.balanceOf(lender) / DECIMALS, 900_000);
+        assertEq(token.balanceOf(governanceTreasury) / DECIMALS, 753);
+        assertEq(token.balanceOf(address(lending)) / DECIMALS, 101_733);
+        assertEq(nft.ownerOf(1), borrower);
+
+        vm.startPrank(admin);
+        usdc.unBlacklist(lender);
+        vm.stopPrank();
+
+        vm.startPrank(lender);
+        uint256 stuckTokenAmount = lending.stuckToken(address(token), lender);
+        lending.withdrawStuckToken(address(token));
+        token.transferFrom(address(lending), lender, stuckTokenAmount);
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(borrower) / DECIMALS, 997_512); 
+        assertEq(token.balanceOf(lender) / DECIMALS, 1_001_733);
+        assertEq(token.balanceOf(governanceTreasury) / DECIMALS, 753);
+        assertEq(token.balanceOf(address(lending)) / DECIMALS, 0);
+        assertEq(nft.ownerOf(1), borrower);
     }
 }
