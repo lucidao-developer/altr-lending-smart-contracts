@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
-import {UD60x18, ud, convert} from "@prb/math/src/UD60x18.sol";
+import {UD60x18, ud, convert, ceil} from "@prb/math/src/UD60x18.sol";
 import {IPriceIndex} from "./IPriceIndex.sol";
+import {IAllowList} from "./IAllowList.sol";
 
 /**
  * @title Lending
@@ -17,30 +18,28 @@ import {IPriceIndex} from "./IPriceIndex.sol";
  * @notice This contract allows users to borrow and lend tokens against NFT collateral
  *         including features like liquidation, interest rate calculation, and protocol fees.
  */
-contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
-    using SafeERC20 for IERC20;
+contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
+    using SafeERC20 for ERC20;
     using ERC165Checker for address;
 
-    uint256 private constant SECONDS_IN_DAY = 3600 * 24;
-    uint256 public constant SECONDS_IN_YEAR = 360 * SECONDS_IN_DAY;
-    uint256 public constant PRECISION = 10000;
-    uint256 public constant MIN_GRACE_PERIOD = 2 * SECONDS_IN_DAY;
-    uint256 public constant MAX_GRACE_PERIOD = 15 * SECONDS_IN_DAY;
-    uint256 public constant MAX_PROTOCOL_FEE = 4 * PRECISION;
-    uint256 public constant MAX_REPAY_GRACE_FEE = 4 * PRECISION;
-    uint256 public constant MAX_BASE_ORIGINATION_FEE = 3 * PRECISION;
-    uint256 public constant MAX_LIQUIDATION_FEE = 15 * PRECISION;
-    uint256 public constant MAX_INTEREST_RATE = 20 * PRECISION;
-
     /**
-     * @notice PriceIndex contract for NFT price valuations
+     * @notice ContructorParmas struct to prevent stack too deep error
      */
-    IPriceIndex public priceIndex;
-
-    /**
-     * @notice Address of the GovernanceTreasury contract
-     */
-    address public governanceTreasury;
+    struct ConstructorParams {
+        address priceIndex;
+        address governanceTreasury;
+        address allowList;
+        uint256 protocolFee;
+        uint256 gracePeriod;
+        uint256 repayGraceFee;
+        uint256[] originationFeeRanges;
+        uint256 liquidationFee;
+        uint256[] durations;
+        uint256[] interestRates;
+        uint256 baseOriginationFee;
+        uint256 lenderExclusiveLiquidationPeriod;
+        uint256 feeReductionFactor;
+    }
 
     /**
      * @notice Loan struct to store loans details
@@ -60,6 +59,37 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         bool paid;
         bool cancelled;
     }
+
+    uint256 public constant SECONDS_IN_YEAR = 360 days;
+    uint256 public constant MIN_GRACE_PERIOD = 2 days;
+    uint256 public constant MAX_GRACE_PERIOD = 15 days;
+    uint256 public constant MIN_LENDER_EXCLUSIVE_LIQUIDATION_PERIOD = 1 days;
+    uint256 public constant MAX_LENDER_EXCLUSIVE_LIQUIDATION_PERIOD = 5 days;
+    uint256 public constant VALUATION_EXPIRY = 150 days;
+    uint256 public constant PRECISION = 10000;
+    uint256 public constant MAX_PROTOCOL_FEE = 400; // 4%
+    uint256 public constant MAX_REPAY_GRACE_FEE = 400; // 4%
+    uint256 public constant MAX_BASE_ORIGINATION_FEE = 300; // 3%
+    uint256 public constant MAX_LIQUIDATION_FEE = 1500; // 15%
+    uint256 public constant MAX_INTEREST_RATE = 2000; // 20%
+    uint256 public constant MAX_ORIGINATION_FEE_RANGES_LENGTH = 6;
+
+    bytes32 public constant TREASURY_MANAGER_ROLE = keccak256("TREASURY_MANAGER_ROLE");
+
+    /**
+     * @notice PriceIndex contract for NFT price valuations
+     */
+    IPriceIndex public priceIndex;
+
+    /**
+     * @notice Address of the GovernanceTreasury contract
+     */
+    address public governanceTreasury;
+
+    /**
+     * @notice AllowList contract to manage lending users
+     */
+    IAllowList public allowList;
 
     /**
      * @notice Protocol fee rate (in basis points)
@@ -97,6 +127,11 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     uint256 public baseOriginationFee;
 
     /**
+     * @notice Lender exclusive liquidation period in seconds
+     */
+    uint256 public lenderExclusiveLiquidationPeriod;
+
+    /**
      * @notice ID for the last created loan
      */
     uint256 public lastLoanId;
@@ -115,6 +150,16 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @notice Mapping from loan duration to APR in %
      */
     mapping(uint256 => uint256) public aprFromDuration; // apr in %
+
+    /**
+     * @notice Mapping to prevent some NFTs from being used as collateral
+     */
+    mapping(address => mapping(uint256 => bool)) public disallowedNFTs;
+
+    /**
+     * @notice Mapping to store stuck token amount for user for every token
+     */
+    mapping(address => mapping(address => uint256)) public stuckToken;
 
     /**
      * @notice Emitted when a loan is created
@@ -186,6 +231,12 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     event PriceIndexSet(address indexed newPriceIndex);
 
     /**
+     * @notice Emitted when the allow list is updated
+     * @param newAllowList The address of the new allow list
+     */
+    event AllowListSet(address indexed newAllowList);
+
+    /**
      * @notice Emitted when the governance treasury is updated
      * @param newGovernanceTreasury The address of the new governance treasury contract
      */
@@ -222,7 +273,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     event BaseOriginationFeeSet(uint256 newBaseOriginationFee);
 
     /**
-     * @notice Emitted when new tokens are add to allowedTokens
+     * @notice Emitted when new tokens are added to allowedTokens
      * @param tokens New allowed tokens
      */
     event TokensSet(address[] tokens);
@@ -247,57 +298,73 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     event LoanTypesUnset(uint256[] durations);
 
     /**
+     * @notice Emitted when originationFeeRanges is updated
+     * @param originationFeeRanges The new origination fee ranges
+     */
+    event OriginationFeeRangesSet(uint256[] originationFeeRanges);
+
+    /**
+     * @notice Emitted when feeReductionFactor is updated
+     * @param feeReductionFactor The new fee reduction factor
+     */
+    event FeeReductionFactorSet(uint256 feeReductionFactor);
+
+    /**
+     * @notice Emitted when lenderExclusiveLiquidationPeriodSet is updated
+     * @param lenderExclusiveLiquidationPeriod The new lender exclusive liquidation period
+     */
+    event LenderExclusiveLiquidationPeriodSet(uint256 lenderExclusiveLiquidationPeriod);
+
+    /**
+     * @notice Emitted when a new NFT is added to disallowedNFTs
+     * @param collectionAddress The collection address of the NFT to disallow
+     * @param tokenId The token id of the NFT to disallow
+     */
+    event NFTAllowed(address collectionAddress, uint256 tokenId);
+
+    /**
+     * @notice Emitted when a new NFT is removed from disallowNFTs
+     * @param collectionAddress The collection address of the NFT to allow
+     * @param tokenId The token id of the NFT to allow
+     */
+    event NFTDisallowed(address collectionAddress, uint256 tokenId);
+
+    /**
+     * @notice Modifier to check that a function caller is allowlisted
+     */
+    modifier onlyAllowListed() {
+        require(allowList.isAddressAllowed(msg.sender), "Lending: address not allowed");
+        _;
+    }
+
+    /**
      * @notice Contract constructor
-     * @param _priceIndex Price index contract address
-     * @param _governanceTreasury Governance treasury contract address
-     * @param _protocolFee Protocol fee in basis point
-     * @param _gracePeriod Grace period in seconds
-     * @param _repayGraceFee Repay grace fee in %
-     * @param _originationFeeRanges Origination fee ranges
-     * @param _feeReductionFactor Origination fee reduction factor in %
-     * @param _liquidationFee Liquidation fee in %
-     * @param _durations Array of allowed loan durations
-     * @param _interestRates Array of interest rates corresponding to each duration
+     * @param _constructorParams The constructor parameters
      */
-    constructor(
-        address _priceIndex,
-        address _governanceTreasury,
-        uint256 _protocolFee,
-        uint256 _gracePeriod,
-        uint256 _repayGraceFee,
-        uint256[] memory _originationFeeRanges,
-        uint256 _feeReductionFactor,
-        uint256 _liquidationFee,
-        uint256[] memory _durations,
-        uint256[] memory _interestRates,
-        uint256 _baseOriginationFee
-    ) {
-        originationFeeRanges = _originationFeeRanges;
+    constructor(ConstructorParams memory _constructorParams) {
+        _setProtocolFee(_constructorParams.protocolFee);
+        _setRepayGracePeriod(_constructorParams.gracePeriod);
+        _setRepayGraceFee(_constructorParams.repayGraceFee);
+        _setGovernanceTreasury(_constructorParams.governanceTreasury);
+        _setPriceIndex(_constructorParams.priceIndex);
+        _setAllowList(_constructorParams.allowList);
+        _setLiquidationFee(_constructorParams.liquidationFee);
+        _setLoanTypes(_constructorParams.durations, _constructorParams.interestRates);
+        _setBaseOriginationFee(_constructorParams.baseOriginationFee);
+        _setRanges(_constructorParams.originationFeeRanges);
+        _setFeeReductionFactor(_constructorParams.feeReductionFactor);
+        _setLenderExclusiveLiquidationPeriod(_constructorParams.lenderExclusiveLiquidationPeriod);
 
-        feeReductionFactor = _feeReductionFactor;
-
-        _setProtocolFee(_protocolFee);
-        _setRepayGracePeriod(_gracePeriod);
-        _setRepayGraceFee(_repayGraceFee);
-        _setGovernanceTreasury(_governanceTreasury);
-        _setPriceIndex(_priceIndex);
-        _setLiquidationFee(_liquidationFee);
-        _setLoanTypes(_durations, _interestRates);
-        _setBaseOriginationFee(_baseOriginationFee);
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
     /**
-     * @notice ERC721 Token Received Hook
-     * @dev Needed as a callback to receive ERC721 token through `safeTransferFrom` function
-     */
-    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
-        return IERC721Receiver.onERC721Received.selector;
-    }
-
-    /**
-     * @notice Allows a user to borrow a specified amount using an NFT as collateral
-     * @dev Ensures that the token is allowed and the duration is valid before creating the loan
-     * @dev Only NFTs that have a valuation from the PriceIndex contract can be used as collateral
+     * @notice Allows a user to request a loan using their NFT as collateral
+     * @custom:use-case If Alice wants to borrow 500.000 USDT for 7 days using her Altr NFT,
+     * she would call this function
+     * @dev Ensures token is allowed, duration is valid, and the NFT has a price valuation
+     * @dev Only NFTs from approved collections with a price valuation can be used
+     * @dev Only allowlisted address can call this function
      * @param _token The address of the token being borrowed
      * @param _amount The amount of tokens to be borrowed
      * @param _nftCollection The address of the NFT collection used as collateral
@@ -312,15 +379,25 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         uint256 _nftId,
         uint256 _duration,
         uint256 _deadline
-    ) external nonReentrant {
+    ) external nonReentrant onlyAllowListed {
         require(allowedTokens[_token], "Lending: borrow token not allowed");
         require(aprFromDuration[_duration] != 0, "Lending: invalid duration");
         require(_amount > 0, "Lending: borrow amount must be greater than zero");
         require(_deadline > block.timestamp, "Lending: deadline must be after current timestamp");
+        require(
+            _nftCollection.supportsInterface(type(IERC721).interfaceId),
+            "Lending: collection does not support IERC721 interface"
+        );
+        require(!disallowedNFTs[_nftCollection][_nftId], "Lending: cannot use this NFT as collateral");
 
         IPriceIndex.Valuation memory valuation = priceIndex.getValuation(_nftCollection, _nftId);
 
-        require(_amount <= (valuation.price * valuation.ltv) / 100, "Lending: amount greater than max borrow");
+        require(valuation.timestamp + VALUATION_EXPIRY > block.timestamp, "Lending: valuation expired");
+        require(valuation.ltv <= 100, "Lending: ltv greater than max");
+        require(
+            _amount <= (valuation.price * (10 ** ERC20(_token).decimals()) * valuation.ltv) / 100,
+            "Lending: amount greater than max borrow"
+        );
 
         Loan storage loan = loans[++lastLoanId];
         loan.borrower = msg.sender;
@@ -331,9 +408,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         loan.duration = _duration;
         loan.collateralValue = valuation.price;
         loan.interestRate = aprFromDuration[_duration];
-        loan.paid = false;
         loan.deadline = _deadline;
-        loan.cancelled = false;
 
         emit LoanCreated(
             lastLoanId,
@@ -350,7 +425,9 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     }
 
     /**
-     * @notice Allows a borrower to cancel a loan
+     * @notice Allows the borrower to cancel their loan request if it hasn't been accepted yet
+     * @custom:use-case If Alice changes her mind and doesn't want the loan anymore, she can cancel it
+     * before a lender accepts it
      * @dev Borrower can cancel a requested load if not yet accepted by any lender
      * @param _loanId The ID of the loan to cancel
      */
@@ -367,34 +444,49 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     }
 
     /**
-     * @notice Allows a lender to accept an existing loan
+     * @notice Allows a lender to accept an existing loan request
+     * @custom:use-case If Bob wants to lend 500.000 USDT to Alice for 7 days, he would accept her
+     * loan request by calling this function
      * @dev Transfers the borrowed tokens from the lender to the borrower and sets the loan start time
+     * @dev Only allowlisted address can call this function
      * @param _loanId The ID of the loan to accept
      */
-    function acceptLoan(uint256 _loanId) external nonReentrant {
+    function acceptLoan(uint256 _loanId) external nonReentrant onlyAllowListed {
         Loan storage loan = loans[_loanId];
 
         require(loan.borrower != address(0) && loan.lender == address(0), "Lending: invalid loan id");
         require(!loan.cancelled, "Lending: loan cancelled");
         require(loan.deadline > block.timestamp, "Lending: loan acceptance deadline passed");
+        require(allowedTokens[loan.token], "Lending: borrow token not allowed");
+        require(!disallowedNFTs[loan.nftCollection][loan.nftId], "Lending: cannot use this NFT as collateral");
+
+        IPriceIndex.Valuation memory valuation = priceIndex.getValuation(loan.nftCollection, loan.nftId);
+        require(
+            (valuation.price * (10 ** ERC20(loan.token).decimals()) * valuation.ltv) / 100 >= loan.amount,
+            "Lending: loan undercollateralized"
+        );
 
         loan.lender = msg.sender;
         loan.startTime = block.timestamp;
 
-        IERC20(loan.token).safeTransferFrom(msg.sender, loan.borrower, loan.amount);
+        ERC20(loan.token).safeTransferFrom(msg.sender, loan.borrower, loan.amount);
         IERC721(loan.nftCollection).safeTransferFrom(loan.borrower, address(this), loan.nftId);
 
         emit LoanAccepted(_loanId, loan.lender, loan.startTime);
     }
 
     /**
-     * @notice Allows a borrower to repay a loan
+     * @notice Allows a borrower to repay the loan and reclaim their NFT
+     * @custom:use-case After 7 days, Alice can repay her 500.000 USDT loan along with the accrued interest
+     * and fees to get her NFT back
      * @dev Transfers the repayment amount and additional fees to the lender and contract respectively
+     * @dev Only allowlisted address or loan borrower can call this function
      * @param _loanId The ID of the loan being repaid
      */
     function repayLoan(uint256 _loanId) external nonReentrant {
         Loan storage loan = loans[_loanId];
 
+        require(msg.sender == loan.borrower || allowList.isAddressAllowed(msg.sender), "Lending: address not allowed");
         require(loan.borrower != address(0) && loan.lender != address(0), "Lending: invalid loan id");
         require(!loan.paid, "Lending: loan already paid");
         require(block.timestamp < loan.startTime + loan.duration + repayGracePeriod, "Lending: too late");
@@ -402,20 +494,28 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         uint256 totalPayable = loan.amount
             + getDebtWithPenalty(
                 loan.amount, loan.interestRate + protocolFee, loan.duration, block.timestamp - loan.startTime
-            ) + getOriginationFee(loan.amount);
+            ) + getOriginationFee(loan.amount, loan.token);
         uint256 lenderPayable = loan.amount
             + getDebtWithPenalty(loan.amount, loan.interestRate, loan.duration, block.timestamp - loan.startTime);
         uint256 platformFee = totalPayable - lenderPayable;
 
         loan.paid = true;
 
-        IERC20(loan.token).safeTransferFrom(msg.sender, loan.lender, lenderPayable);
-
-        if (block.timestamp > loan.startTime + loan.duration) {
-            platformFee += (totalPayable * repayGraceFee) / PRECISION;
+        try this.attemptTransfer(loan.token, msg.sender, loan.lender, lenderPayable) {}
+        catch {
+            uint256 balanceBefore = ERC20(loan.token).balanceOf(address(this));
+            ERC20(loan.token).safeTransferFrom(msg.sender, address(this), lenderPayable);
+            uint256 balanceAfter = ERC20(loan.token).balanceOf(address(this));
+            stuckToken[loan.token][loan.lender] += balanceAfter - balanceBefore;
         }
 
-        IERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, platformFee);
+        if (block.timestamp > loan.startTime + loan.duration) {
+            platformFee += (lenderPayable * repayGraceFee) / PRECISION;
+        }
+
+        if (platformFee > 0) {
+            ERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, platformFee);
+        }
 
         IERC721(loan.nftCollection).safeTransferFrom(address(this), loan.borrower, loan.nftId);
 
@@ -424,6 +524,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Allows a lender to claim NFT from an overdue loan
+     * @custom:use-case If Alice fails to repay her loan, Bob can claim her NFT as collateral
      * @dev Transfers the collateralized NFT to the lender
      * @param _loanId The ID of the loan being liquidated
      */
@@ -443,27 +544,37 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     }
 
     /**
-     * @notice Allows an address to liquidate an overdue loan
+     * @notice Allows anyone to liquidate an overdue loan, sending repayment and fees to the lender and claiming the NFT
+     * @custom:use-case If Alice defaults and Bob doesn't claim the NFT, Charlie can liquidate the loan,
+     * paying Bob and claiming the NFT
      * @dev Transfers the repayment amount and additional fees to the lender and contract respectively
+     * @dev Only allowlisted address can call this function
      * @param _loanId The ID of the loan being liquidated
      */
-    function liquidateLoan(uint256 _loanId) external nonReentrant {
+    function liquidateLoan(uint256 _loanId) external nonReentrant onlyAllowListed {
         Loan storage loan = loans[_loanId];
 
         require(loan.borrower != address(0) && loan.lender != address(0), "Lending: invalid loan id");
-        require(block.timestamp >= loan.startTime + loan.duration + repayGracePeriod, "Lending: too early");
+        require(
+            block.timestamp >= loan.startTime + loan.duration + repayGracePeriod + lenderExclusiveLiquidationPeriod,
+            "Lending: too early"
+        );
         require(!loan.paid, "Lending: loan already paid");
 
         uint256 totalPayable = loan.amount
             + getDebtWithPenalty(
                 loan.amount, loan.interestRate + protocolFee, loan.duration, block.timestamp - loan.startTime
-            ) + getOriginationFee(loan.amount) + getLiquidationFee(loan.amount);
+            ) + getOriginationFee(loan.amount, loan.token) + getLiquidationFee(loan.amount);
         uint256 lenderPayable = loan.amount
             + getDebtWithPenalty(loan.amount, loan.interestRate, loan.duration, block.timestamp - loan.startTime);
+        uint256 platformFee = totalPayable - lenderPayable;
 
         loan.paid = true;
-        IERC20(loan.token).safeTransferFrom(msg.sender, loan.lender, lenderPayable);
-        IERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, totalPayable - lenderPayable);
+        ERC20(loan.token).safeTransferFrom(msg.sender, loan.lender, lenderPayable);
+
+        if (platformFee > 0) {
+            ERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, platformFee);
+        }
 
         IERC721(loan.nftCollection).safeTransferFrom(address(this), msg.sender, loan.nftId);
 
@@ -471,22 +582,62 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
     }
 
     /**
+     * @notice Allows a lender to withdraw their stuck tokens if something fails during repayment
+     * @custom:use-case If Alice repay her loan but for some reason the token transfer to Bob fails,
+     * the contract transfer those tokens on the contract itself and than Bob can try to solve the
+     * problem and withdraw the tokens when fixed using this function
+     * @param token The address of the tokens that are stucked into the contract
+     */
+    function withdrawStuckToken(address token) external {
+        uint256 stuckTokenAmount = stuckToken[token][msg.sender];
+        require(stuckTokenAmount > 0, "Lending: you have no stuck tokens");
+
+        delete stuckToken[token][msg.sender];
+
+        ERC20(token).approve(msg.sender, stuckTokenAmount);
+    }
+
+    /**
+     * @notice Wrapper function to enable the try/catch constructor for the safeTransferFrom function
+     * @dev Only the contract itself can call this function
+     * @param token The token to attempt transfer
+     * @param origin The address to transfer the token from
+     * @param beneficiary The address to transfer the token to
+     * @param amount The amount of token to transfer
+     */
+    function attemptTransfer(address token, address origin, address beneficiary, uint256 amount) external {
+        require(msg.sender == address(this), "Lending: only the contract itself can call this function");
+        ERC20(token).safeTransferFrom(origin, beneficiary, amount);
+    }
+
+    /**
      * @notice Updates the address of the price index contract used for valuations
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _priceIndex The address of the new price index contract
      */
-    function setPriceIndex(address _priceIndex) external onlyOwner {
+    function setPriceIndex(address _priceIndex) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setPriceIndex(_priceIndex);
 
         emit PriceIndexSet(_priceIndex);
     }
 
     /**
+     * @notice Updates the address of the allow list contract
+     * @dev Only the admin can call this function
+     * @param _allowList The address of the new allow list contract
+     */
+    function setAllowList(address _allowList) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _setAllowList(_allowList);
+
+        emit AllowListSet(_allowList);
+    }
+
+    /**
      * @notice Updates the address of the governance treasury contract
-     * @dev Only the contract owner can call this function
+     * @dev Only the treasury manager can call this function
      * @param _governanceTreasury The address of the new governance treasury contract
      */
-    function setGovernanceTreasury(address _governanceTreasury) external onlyOwner {
+    function setGovernanceTreasury(address _governanceTreasury) external onlyRole(TREASURY_MANAGER_ROLE) {
         _setGovernanceTreasury(_governanceTreasury);
 
         emit GovernanceTreasurySet(_governanceTreasury);
@@ -494,10 +645,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the grace period for loan repayment
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _gracePeriod The new grace period for repayment
      */
-    function setRepayGracePeriod(uint256 _gracePeriod) external onlyOwner {
+    function setRepayGracePeriod(uint256 _gracePeriod) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setRepayGracePeriod(_gracePeriod);
 
         emit RepayGracePeriodSet(_gracePeriod);
@@ -505,10 +656,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the grace fee for loan repayment
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _repayGraceFee The new grace fee for repayment
      */
-    function setRepayGraceFee(uint256 _repayGraceFee) external onlyOwner {
+    function setRepayGraceFee(uint256 _repayGraceFee) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setRepayGraceFee(_repayGraceFee);
 
         emit RepayGraceFeeSet(_repayGraceFee);
@@ -516,10 +667,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the protocol fee
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _fee The new protocol fee
      */
-    function setProtocolFee(uint256 _fee) external onlyOwner {
+    function setProtocolFee(uint256 _fee) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setProtocolFee(_fee);
 
         emit ProtocolFeeSet(_fee);
@@ -527,10 +678,10 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the liquidation fee
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _fee The new liquidation fee
      */
-    function setLiquidationFee(uint256 _fee) external onlyOwner {
+    function setLiquidationFee(uint256 _fee) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setLiquidationFee(_fee);
 
         emit LiquidationFeeSet(_fee);
@@ -538,48 +689,97 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the base origination fee
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _fee The new base origination fee
      */
-    function setBaseOriginationFee(uint256 _fee) external onlyOwner {
+    function setBaseOriginationFee(uint256 _fee) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setBaseOriginationFee(_fee);
 
         emit BaseOriginationFeeSet(_fee);
     }
 
     /**
-     * @notice Allows the contract owner to whitelist tokens that can be borrowed
-     * @dev Only the contract owner can call this function
+     * @notice Sets the lender exclusive liquidation period
+     * @dev Only the admin can call this function
+     * @param _lenderExclusiveLiquidationPeriod The new lender exclusive liquidation period
+     */
+    function setLenderExclusiveLiquidationPeriod(uint256 _lenderExclusiveLiquidationPeriod)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        _setLenderExclusiveLiquidationPeriod(_lenderExclusiveLiquidationPeriod);
+
+        emit LenderExclusiveLiquidationPeriodSet(_lenderExclusiveLiquidationPeriod);
+    }
+
+    /**
+     * @notice Allows the contract admin to whitelist tokens that can be borrowed
+     * @dev Only the admin can call this function
      * @param _tokens Array of token addresses to be whitelisted
      */
-    function setTokens(address[] calldata _tokens) external onlyOwner {
-        for (uint256 i = 0; i < _tokens.length; i++) {
+    function setTokens(address[] calldata _tokens) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 tokenLength = _tokens.length;
+        for (uint256 i = 0; i < tokenLength;) {
             allowedTokens[_tokens[i]] = true;
+            unchecked {
+                ++i;
+            }
         }
 
         emit TokensSet(_tokens);
     }
 
     /**
-     * @notice Allows the contract owner to remove tokens from the whitelist
-     * @dev Only the contract owner can call this function
+     * @notice Allows the contract admin to remove tokens from the whitelist
+     * @dev Only the admin can call this function
      * @param _tokens Array of token addresses to be removed from the whitelist
      */
-    function unsetTokens(address[] calldata _tokens) external onlyOwner {
-        for (uint256 i = 0; i < _tokens.length; i++) {
+    function unsetTokens(address[] calldata _tokens) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 tokenLength = _tokens.length;
+        for (uint256 i = 0; i < tokenLength;) {
             allowedTokens[_tokens[i]] = false;
+            unchecked {
+                ++i;
+            }
         }
 
         emit TokensUnset(_tokens);
     }
 
     /**
+     * @notice Allows the contract admin to prevent an NFT from being used as collateral
+     * @dev Only the admin can call this function
+     * @param _collectionAddress The collection address of the NFT to disallow
+     * @param _tokenId The token id of the NFT to disallow
+     */
+    function disallowNFT(address _collectionAddress, uint256 _tokenId) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        disallowedNFTs[_collectionAddress][_tokenId] = true;
+
+        emit NFTDisallowed(_collectionAddress, _tokenId);
+    }
+
+    /**
+     * @notice Allows the contract admin to allow again an NFT to be used as collateral
+     * @dev Only the admin can call this function
+     * @param _collectionAddress The collection address of the NFT to allow
+     * @param _tokenId The token id of the NFT to allow
+     */
+    function allowNFT(address _collectionAddress, uint256 _tokenId) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        disallowedNFTs[_collectionAddress][_tokenId] = false;
+
+        emit NFTAllowed(_collectionAddress, _tokenId);
+    }
+
+    /**
      * @notice Sets the available loan types by specifying the duration and interest rate
-     * @dev Only the contract owner can call this function. The lengths of _durations and _interestRates arrays must be equal
+     * @dev Only the admin can call this function. The lengths of _durations and _interestRates arrays must be equal
      * @param _durations Array of loan durations
      * @param _interestRates Array of interest rates corresponding to each duration
      */
-    function setLoanTypes(uint256[] calldata _durations, uint256[] calldata _interestRates) external onlyOwner {
+    function setLoanTypes(uint256[] calldata _durations, uint256[] calldata _interestRates)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         _setLoanTypes(_durations, _interestRates);
 
         emit LoanTypesSet(_durations, _interestRates);
@@ -587,12 +787,16 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Removes the specified loan types by duration
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _durations Array of loan durations to be removed
      */
-    function unsetLoanTypes(uint256[] calldata _durations) external onlyOwner {
-        for (uint256 i = 0; i < _durations.length; i++) {
+    function unsetLoanTypes(uint256[] calldata _durations) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 durationsLength = _durations.length;
+        for (uint256 i = 0; i < durationsLength;) {
             delete aprFromDuration[_durations[i]];
+            unchecked {
+                ++i;
+            }
         }
 
         emit LoanTypesUnset(_durations);
@@ -600,30 +804,78 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
 
     /**
      * @notice Sets the fee reduction factor
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _factor The new fee reduction factor
      */
-    function setFeeReductionFactor(uint256 _factor) external onlyOwner {
-        feeReductionFactor = _factor;
+    function setFeeReductionFactor(uint256 _factor) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _setFeeReductionFactor(_factor);
+
+        emit FeeReductionFactorSet(_factor);
     }
 
     /**
      * @notice Sets the originationFeeRanges array
-     * @dev Only the contract owner can call this function
+     * @dev Only the admin can call this function
      * @param _originationFeeRanges The new originationFeeRanges array
      */
-    function setRanges(uint256[] memory _originationFeeRanges) public onlyOwner {
-        originationFeeRanges = _originationFeeRanges;
+    function setRanges(uint256[] memory _originationFeeRanges) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _setRanges(_originationFeeRanges);
+
+        emit OriginationFeeRangesSet(_originationFeeRanges);
     }
 
     /**
      * @notice Retrieves the loan details for a specific loan ID
      * @dev Anyone can call this function
-     * @param loanId The ID of the loan
+     * @dev This function can return uninitialized loans if called with indices greater than lastLoanId
+     * @param _loanId The ID of the loan
      * @return loan The loan structure containing the details of the loan
      */
-    function getLoan(uint256 loanId) external view returns (Loan memory loan) {
-        return loans[loanId];
+    function getLoan(uint256 _loanId) external view returns (Loan memory loan) {
+        return loans[_loanId];
+    }
+
+    /**
+     * @notice ERC721 Token Received Hook
+     * @dev Needed as a callback to receive ERC721 token through `safeTransferFrom` function
+     */
+    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
+        return IERC721Receiver.onERC721Received.selector;
+    }
+
+    /**
+     * @notice Calculates the origination fee based on the loan amount
+     * @dev This is a utility function for internal use
+     * @param _amount The loan amount
+     * @return uint256 The origination fee
+     */
+    function getOriginationFee(uint256 _amount, address _token) public view returns (uint256) {
+        UD60x18 originationFee = convert(baseOriginationFee);
+        UD60x18 factor = convert(feeReductionFactor);
+        UD60x18 precision = convert(PRECISION);
+
+        uint256 originationFeeRangesLength = originationFeeRanges.length;
+        for (uint256 i = 0; i < originationFeeRangesLength;) {
+            if (_amount < originationFeeRanges[i] * (10 ** ERC20(_token).decimals())) {
+                break;
+            } else {
+                originationFee = originationFee.mul(precision).div(factor);
+            }
+            unchecked {
+                ++i;
+            }
+        }
+        return convert(convert(_amount).mul(originationFee).div(precision));
+    }
+
+    /**
+     * @notice Calculates the liquidation fee based on the loan amount
+     * @dev This is a utility function for internal use
+     * @param _borrowedAmount The loan amount
+     * @return uint256 The liquidation fee
+     */
+    function getLiquidationFee(uint256 _borrowedAmount) public view returns (uint256) {
+        return (_borrowedAmount * liquidationFee) / PRECISION;
     }
 
     /**
@@ -644,39 +896,11 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         if (_repaymentDuration > _loanDuration) {
             _repaymentDuration = _loanDuration;
         }
-        UD60x18 accruedDebt = convert((_borrowedAmount * _apr * _repaymentDuration) / SECONDS_IN_YEAR / 100 / PRECISION);
+        UD60x18 accruedDebt =
+            convert(_borrowedAmount * _apr * _repaymentDuration).div(convert(SECONDS_IN_YEAR * PRECISION));
         UD60x18 penaltyFactor = convert(_loanDuration - _repaymentDuration).div(convert(_loanDuration));
 
         return convert(accruedDebt.add(accruedDebt.mul(penaltyFactor)));
-    }
-
-    /**
-     * @notice Calculates the origination fee based on the loan amount
-     * @dev This is a utility function for internal use
-     * @param _amount The loan amount
-     * @return uint256 The origination fee
-     */
-    function getOriginationFee(uint256 _amount) public view returns (uint256) {
-        uint256 originationFee = baseOriginationFee;
-
-        for (uint256 i = 0; i < originationFeeRanges.length; i++) {
-            if (_amount < originationFeeRanges[i]) {
-                break;
-            } else {
-                originationFee = (originationFee * PRECISION) / feeReductionFactor;
-            }
-        }
-        return (_amount * originationFee) / 100 / PRECISION;
-    }
-
-    /**
-     * @notice Calculates the liquidation fee based on the loan amount
-     * @dev This is a utility function for internal use
-     * @param _borrowedAmount The loan amount
-     * @return uint256 The liquidation fee
-     */
-    function getLiquidationFee(uint256 _borrowedAmount) public view returns (uint256) {
-        return (_borrowedAmount * liquidationFee) / PRECISION;
     }
 
     /**
@@ -692,6 +916,20 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         );
 
         priceIndex = IPriceIndex(_priceIndex);
+    }
+
+    /**
+     * @notice Sets the allow list for the contract
+     * @dev It checks that the new allow list address is not zero and supports the IAllowList interface
+     * @param _allowList The new allow list address
+     */
+    function _setAllowList(address _allowList) internal {
+        require(_allowList != address(0), "Lending: cannot be null address");
+        require(
+            _allowList.supportsInterface(type(IAllowList).interfaceId), "Lending: does not support IAllowList interface"
+        );
+
+        allowList = IAllowList(_allowList);
     }
 
     /**
@@ -752,10 +990,15 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
      * @param _interestRates Array of interest rates corresponding to each duration
      */
     function _setLoanTypes(uint256[] memory _durations, uint256[] memory _interestRates) internal {
-        require(_durations.length == _interestRates.length, "Lending: invalid input");
-        for (uint256 i = 0; i < _durations.length; i++) {
+        uint256 durationsLength = _durations.length;
+        require(durationsLength == _interestRates.length, "Lending: invalid input");
+        for (uint256 i = 0; i < durationsLength;) {
             require(_interestRates[i] <= MAX_INTEREST_RATE, "Lending: cannot be more than max");
+            require(_interestRates[i] > 0, "Lending: cannot be 0");
             aprFromDuration[_durations[i]] = _interestRates[i];
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -767,5 +1010,55 @@ contract Lending is ReentrancyGuard, IERC721Receiver, Ownable {
         require(_fee <= MAX_BASE_ORIGINATION_FEE, "Lending: cannot be more than max");
 
         baseOriginationFee = _fee;
+    }
+
+    /**
+     * @notice Internal function to set new origination fee ranges array
+     * @param _originationFeeRanges The new origination fee ranges array
+     */
+    function _setRanges(uint256[] memory _originationFeeRanges) internal {
+        uint256 originationFeeRangesLength = _originationFeeRanges.length;
+        require(originationFeeRangesLength > 0, "Lending: cannot be an empty array");
+        require(
+            originationFeeRangesLength <= MAX_ORIGINATION_FEE_RANGES_LENGTH, "Lending: cannot be more than max length"
+        );
+        require(_originationFeeRanges[0] > 0, "Lending: first entry must be greater than 0");
+        for (uint256 i = 1; i < originationFeeRangesLength;) {
+            require(
+                _originationFeeRanges[i - 1] < _originationFeeRanges[i], "Lending: entries must be strictly increasing"
+            );
+            unchecked {
+                ++i;
+            }
+        }
+
+        originationFeeRanges = _originationFeeRanges;
+    }
+
+    /**
+     * @notice Internal function to set new fee refuction factor
+     * @param _factor The new fee reduction factor
+     */
+    function _setFeeReductionFactor(uint256 _factor) internal {
+        require(_factor >= PRECISION, "Lending: fee reduction factor cannot be less than PRECISION");
+
+        feeReductionFactor = _factor;
+    }
+
+    /**
+     * @notice Internal function to set new lender exclusive liquidation period
+     * @param _lenderExclusiveLiquidationPeriod The new lender exclusive liquidation period
+     */
+    function _setLenderExclusiveLiquidationPeriod(uint256 _lenderExclusiveLiquidationPeriod) internal {
+        require(
+            _lenderExclusiveLiquidationPeriod >= MIN_LENDER_EXCLUSIVE_LIQUIDATION_PERIOD,
+            "Lending: cannot be less than min exclusive period"
+        );
+        require(
+            _lenderExclusiveLiquidationPeriod < MAX_LENDER_EXCLUSIVE_LIQUIDATION_PERIOD,
+            "Lending: cannot be more than max exclusive period"
+        );
+
+        lenderExclusiveLiquidationPeriod = _lenderExclusiveLiquidationPeriod;
     }
 }
