@@ -3,21 +3,20 @@ pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
 import {Lending} from "../src/Lending.sol";
-import {TestERC20} from "../src/test/TestERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestERC721} from "../src/test/TestERC721.sol";
 import {IPriceIndex} from "../src/IPriceIndex.sol";
 import {TestPriceIndex} from "../src/test/TestPriceIndex.sol";
-import "forge-std/console.sol";
 
 contract TestLending is Test {
     uint256 immutable WEEK_1 = 7 * 60 * 60 * 24;
     uint256 immutable MONTHS_1 = 60 * 60 * 24 * 30;
     uint256 immutable MONTHS_18 = 60 * 60 * 24 * 540;
 
-    uint256 immutable INITIAL_TOKENS = 1_000_000e18;
+    uint256 immutable DECIMALS;
+    uint256 immutable INITIAL_TOKENS;
 
     Lending public lending;
-    TestERC20 public token;
     TestERC721 public nft;
     TestPriceIndex public priceIndex;
 
@@ -28,87 +27,16 @@ contract TestLending is Test {
     address liquidator = address(0x5);
     address treasuryManager = address(0xDA0);
 
-    function setUp() public {
-        vm.startPrank(admin);
-        uint256 protocolFee = 150; // 1.5%
-        uint256 repayGracePeriod = 60 * 60 * 24 * 5; // 5 days
-        uint256 repayGraceFee = 250; // 2.5
-        uint256[] memory originationFeeRanges = new uint256[](3);
-        originationFeeRanges[0] = 50_000; // 50k
-        originationFeeRanges[1] = 100_000; // 100k
-        originationFeeRanges[2] = 500_000; // 500k
-        uint256 liquidationFee = 500; // 5%
-        uint256[] memory durations = new uint256[](6);
-        durations[0] = WEEK_1;
-        durations[1] = MONTHS_1;
-        durations[2] = 3 * MONTHS_1;
-        durations[3] = 6 * MONTHS_1;
-        durations[4] = 12 * MONTHS_1;
-        durations[5] = MONTHS_18;
-        uint256[] memory interestRates = new uint256[](6);
-        interestRates[0] = 660; // 6.6%
-        interestRates[1] = 730; // 7.3%
-        interestRates[2] = 800; // 8%
-        interestRates[3] = 880; // 8.8%
-        interestRates[4] = 970; // 9.7%
-        interestRates[5] = 1_070; // 10.7%
-        uint256 baseOriginationFee = 100; // 1%
-        uint256 lenderExclusiveLiquidationPeriod = 2 days;
-
-        priceIndex = new TestPriceIndex();
-        lending = new Lending(
-            address(priceIndex),
-            governanceTreasury,
-            protocolFee,
-            repayGracePeriod,
-            repayGraceFee,
-            originationFeeRanges,
-            liquidationFee,
-            durations,
-            interestRates,
-            baseOriginationFee,
-            lenderExclusiveLiquidationPeriod
-        );
-        lending.grantRole(lending.TREASURY_MANAGER_ROLE(), treasuryManager);
-        token = new TestERC20();
-        nft = new TestERC721();
-
-        address[] memory tokens = new address[](1);
-        tokens[0] = address(token);
-        lending.setTokens(tokens);
-
-        address[] memory nfts = new address[](1);
-        nfts[0] = address(nft);
-        priceIndex.setValuation(address(nft), 1, 200_000, 50);
-        priceIndex.setValuation(address(nft), 2, 200_000, 50);
-
-        token.mint(borrower, INITIAL_TOKENS);
-        token.mint(lender, INITIAL_TOKENS);
-        token.mint(liquidator, INITIAL_TOKENS);
-
-        nft.mint(borrower, 1, "");
-        nft.mint(borrower, 2, "");
-
-        priceIndex.setValuation(address(0xC0113C71), 0, 1000, 50);
-
-        vm.stopPrank();
-
-        vm.startPrank(borrower);
-        token.approve(address(lending), 2 ** 256 - 1);
-        nft.setApprovalForAll(address(lending), true);
-        vm.stopPrank();
-
-        vm.startPrank(lender);
-        token.approve(address(lending), 2 ** 256 - 1);
-        vm.stopPrank();
-
-        vm.startPrank(liquidator);
-        token.approve(address(lending), 2 ** 256 - 1);
-        vm.stopPrank();
+    constructor(Lending _lending, TestERC721 _nft, TestPriceIndex _priceIndex, uint256 _decimals) {
+        lending = _lending;
+        nft = _nft;
+        priceIndex = _priceIndex;
+        DECIMALS = 10**_decimals;
+        INITIAL_TOKENS = 1_000_000 * DECIMALS;
     }
 
-    function testLending() public {
-        uint256 borrowAmount = 100_000e18;
+    function lendingTest(IERC20 token) public {
+        uint256 borrowAmount = 100_000 * DECIMALS;
         vm.startPrank(admin);
         lending.disallowNFT(address(nft), 2);
         vm.stopPrank();
@@ -184,9 +112,9 @@ contract TestLending is Test {
         // interests = 100_000 * 10.7 * 2_592_000 / (31_104_000 * 100) = 891.67
         // penalty = [(loanDuration - repaymentDuration) / loanDuration] * interests
         // penalty = (46_656_000 - 2_592_000) / 46_656_000 * 891.67 = 842.13
-        assertEq(token.balanceOf(borrower) / 1e18, 997_512); // initialBalance - (interest + protocol fee + origination fee + penalty) = 1_000_000 - [1016.67 + 960.19 + 510.20] = 997_512.94
-        assertEq(token.balanceOf(lender) / 1e18, 1_001_733); // intialBalance + interests + penalty = 1_000_000 + 891.67 + 842.13 ~ 1_001_733 
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 753); // protocol fee + origination fee = [(1016.67-891.67) + (960.19-842.13) + 510.20] = 753.06
+        assertEq(token.balanceOf(borrower) / DECIMALS, 997_512); // initialBalance - (interest + protocol fee + origination fee + penalty) = 1_000_000 - [1016.67 + 960.19 + 510.20] = 997_512.94
+        assertEq(token.balanceOf(lender) / DECIMALS, 1_001_733); // intialBalance + interests + penalty = 1_000_000 + 891.67 + 842.13 ~ 1_001_733 
+        assertEq(token.balanceOf(governanceTreasury) / DECIMALS, 753); // protocol fee + origination fee = [(1016.67-891.67) + (960.19-842.13) + 510.20] = 753.06
 
         assertEq(nft.ownerOf(1), address(borrower));
 
@@ -210,8 +138,8 @@ contract TestLending is Test {
         vm.stopPrank();
     }
 
-    function testGracePeriod() public {
-        uint256 borrowAmount = 100_000e18;
+    function gracePeriod(IERC20 token) public {
+        uint256 borrowAmount = 100_000 * DECIMALS;
 
         vm.startPrank(borrower);
         lending.requestLoan(address(token), borrowAmount, address(nft), 1, MONTHS_18, MONTHS_18);
@@ -245,24 +173,24 @@ contract TestLending is Test {
         // penalty = [(loanDuration - repaymentDuration) / loanDuration] * interests
         // penalty = 0 / 46_656_000 * 891.67 = 0
         // grace period fee = (borrowAmount + interests) * grace period fee / 100 = (100_000 + 16_050) * 2.5 / 100 = 2_901.25
-        assertEq(token.balanceOf(borrower) / 1e18, 978_288); // initialBalance - (interests + protocol fee + origination fee + repay grace fee) = 1_000_000 - (18_300 + 510.20 + 2901.25) = 978_288.55
-        assertEq(token.balanceOf(lender) / 1e18, 1_016_050); // intialBalance + interests + penalty = 1_000_000 + 16_050 + 0 = 1_016_050
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 5_661); // protocol fee + origination fee + repay grace period fee = (18_300 - 16_050) + 510.20 + 2901.25 = 5_661.45
+        assertEq(token.balanceOf(borrower) / DECIMALS, 978_288); // initialBalance - (interests + protocol fee + origination fee + repay grace fee) = 1_000_000 - (18_300 + 510.20 + 2901.25) = 978_288.55
+        assertEq(token.balanceOf(lender) / DECIMALS, 1_016_050); // intialBalance + interests + penalty = 1_000_000 + 16_050 + 0 = 1_016_050
+        assertEq(token.balanceOf(governanceTreasury) / DECIMALS, 5_661); // protocol fee + origination fee + repay grace period fee = (18_300 - 16_050) + 510.20 + 2901.25 = 5_661.45
 
         assertEq(nft.ownerOf(1), address(borrower));
     }
 
-    function testSetters() public {
+    function setters(IERC20 token) public {
         vm.startPrank(admin);
 
-        assertEq(lending.getOriginationFee(500_000e18, address(token)), 1_822_157_434_402_332_361_500);
+        assertEq(lending.getOriginationFee(500_000 * DECIMALS, address(token)), 1_822_157_434);
 
         vm.expectRevert("Lending: cannot be less than min grace period");
         lending.setRepayGracePeriod(172_799);
         vm.expectRevert("Lending: cannot be more than max grace period");
         lending.setRepayGracePeriod(1_296_000);
         lending.setRepayGracePeriod(172_800);
-        assertEq(lending.repayGracePeriod(), 172800);
+        assertEq(lending.repayGracePeriod(), 172_800);
 
         vm.expectRevert("Lending: cannot be more than max");
         lending.setRepayGraceFee(401);
@@ -320,20 +248,20 @@ contract TestLending is Test {
         uint256[] memory durations = new uint256[](2);
         uint256[] memory aprs = new uint256[](1);
         durations[0] = MONTHS_18;
-        aprs[0] = 1070;
+        aprs[0] = 1_070;
         vm.expectRevert("Lending: invalid input");
         lending.setLoanTypes(durations, aprs);
         vm.expectRevert("Lending: cannot be more than max");
         durations = new uint256[](1);
         durations[0] = MONTHS_18;
-        aprs[0] = 2001;
+        aprs[0] = 2_001;
         lending.setLoanTypes(durations, aprs);
 
         vm.expectRevert("Lending: cannot be 0");
         aprs[0] = 0;
         lending.setLoanTypes(durations, aprs);
 
-        aprs[0] = 2000;
+        aprs[0] = 2_000;
         lending.setLoanTypes(durations, aprs);
         assertEq(lending.aprFromDuration(durations[0]), 2_000);
         lending.unsetLoanTypes(durations);
@@ -373,8 +301,6 @@ contract TestLending is Test {
         lending.setBaseOriginationFee(300);
         assertEq(lending.baseOriginationFee(), 300);
 
-        token.mint(borrower, INITIAL_TOKENS);
-        assertEq(token.balanceOf(borrower) / 1e18, 2_000_000);
         nft.mint(borrower, 3, "");
         assertEq(nft.ownerOf(3), address(borrower));
 
@@ -386,8 +312,8 @@ contract TestLending is Test {
         vm.stopPrank();
     }
 
-    function testLiquidate() public {
-        uint256 borrowAmount = 100_000e18;
+    function liquidate(IERC20 token) public {
+        uint256 borrowAmount = 100_000 * DECIMALS;
 
         vm.startPrank(borrower);
         lending.requestLoan(address(token), borrowAmount, address(nft), 1, MONTHS_18, MONTHS_18);
@@ -421,16 +347,16 @@ contract TestLending is Test {
         // penalty = [(loanDuration - repaymentDuration) / loanDuration] * interests
         // penalty = 0 / 46_656_000 * 891.67 = 0
         // liquidation fee = borrowAmount * liquidation fee % / 100  = 100_000 * 5 / 100 = 5_000
-        assertEq(token.balanceOf(borrower) / 1e18, 1_100_000); // initalBalance + borrowAmount = 1_000_000 + 100_000
-        assertEq(token.balanceOf(lender) / 1e18, 1_016_050); // initalBalance + interests + penalty = 1_000_000 + 16_050 + 0
-        assertEq(token.balanceOf(governanceTreasury) / 1e18, 7_760); // protocol fee + origination fee + liquidation fee = 18_300 - 16_050 + 510 + 5000 = 7_760
-        assertEq(token.balanceOf(liquidator) / 1e18, 876_189); // initialBalance - (borrowAmount + interests + protocol fee + origination fee + liquidation fee) = 1_000_000 - (100_000 + 18_300 + 510.20 + 5000) = 876_189.80
+        assertEq(token.balanceOf(borrower) / DECIMALS, 1_100_000); // initalBalance + borrowAmount = 1_000_000 + 100_000
+        assertEq(token.balanceOf(lender) / DECIMALS, 1_016_050); // initalBalance + interests + penalty = 1_000_000 + 16_050 + 0
+        assertEq(token.balanceOf(governanceTreasury) / DECIMALS, 7_760); // protocol fee + origination fee + liquidation fee = 18_300 - 16_050 + 510 + 5000 = 7_760
+        assertEq(token.balanceOf(liquidator) / DECIMALS, 876_189); // initialBalance - (borrowAmount + interests + protocol fee + origination fee + liquidation fee) = 1_000_000 - (100_000 + 18_300 + 510.20 + 5000) = 876_189.80
 
         assertEq(nft.ownerOf(1), address(liquidator));
     }
 
-    function testClaimNFT() public {
-        uint256 borrowAmount = 100_000e18;
+    function claimNFT(IERC20 token) public {
+        uint256 borrowAmount = 100_000 * DECIMALS;
 
         vm.startPrank(borrower);
         lending.requestLoan(address(token), borrowAmount, address(nft), 1, MONTHS_18, MONTHS_18);
@@ -468,8 +394,8 @@ contract TestLending is Test {
         assertEq(nft.ownerOf(1), address(lender));
     }
 
-    function testCancelLoan() public {
-        uint256 borrowAmount = 100_000e18;
+    function cancelLoan(IERC20 token) public {
+        uint256 borrowAmount = 100_000 * DECIMALS;
 
         vm.startPrank(borrower);
         lending.requestLoan(address(token), borrowAmount, address(nft), 1, MONTHS_18, MONTHS_18);
@@ -499,8 +425,8 @@ contract TestLending is Test {
         vm.stopPrank();
     }
 
-    function testLoanDeadline() public {
-        uint256 borrowAmount = 100_000e18;
+    function loanDeadline(IERC20 token) public {
+        uint256 borrowAmount = 100_000 * DECIMALS;
 
         vm.startPrank(borrower);
         lending.requestLoan(address(token), borrowAmount, address(nft), 1, MONTHS_18, MONTHS_18);
@@ -514,8 +440,8 @@ contract TestLending is Test {
         vm.stopPrank();
     }
 
-    function testRepayLoan() public {
-        uint256 borrowAmount = 100_000e18;
+    function repayLoan(IERC20 token) public {
+        uint256 borrowAmount = 100_000 * DECIMALS;
 
         vm.startPrank(borrower);
         lending.requestLoan(address(token), borrowAmount, address(nft), 1, MONTHS_18, MONTHS_18);
@@ -540,12 +466,12 @@ contract TestLending is Test {
         vm.stopPrank();
     }
 
-    function testZFuzz_Lending(uint256 amount, uint256 repaymentDuration) public {
+    function zFuzz_Lending(IERC20 token, uint256 amount, uint256 repaymentDuration) public {
         vm.assume(amount > 0);
         vm.assume(repaymentDuration > 0);
         uint256 loanDuration = MONTHS_18;
         vm.assume(repaymentDuration < loanDuration);
-        uint256 maxBorrowAmount = 100_000e18;
+        uint256 maxBorrowAmount = 100_000 * DECIMALS;
         uint256 borrowerStartBalance = token.balanceOf(borrower);
         uint256 lenderStartBalance = token.balanceOf(lender);
         uint256 contractStartBalance = token.balanceOf(governanceTreasury);
@@ -584,16 +510,16 @@ contract TestLending is Test {
         uint256 interest =
             lending.getDebtWithPenalty(amount, lending.aprFromDuration(loanDuration), loanDuration, repaymentDuration);
 
-        assertEq((borrowerStartBalance - token.balanceOf(borrower)) / 1e18, (feePlusInterest) / 1e18);
-        assertEq((token.balanceOf(lender) - lenderStartBalance) / 1e18, interest / 1e18);
+        assertEq((borrowerStartBalance - token.balanceOf(borrower)) / DECIMALS, (feePlusInterest) / DECIMALS);
+        assertEq((token.balanceOf(lender) - lenderStartBalance) / DECIMALS, interest / DECIMALS);
         assertEq(
-            (token.balanceOf(governanceTreasury) - contractStartBalance) / 1e18, (feePlusInterest - interest) / 1e18
+            (token.balanceOf(governanceTreasury) - contractStartBalance) / DECIMALS, (feePlusInterest - interest) / DECIMALS
         );
     }
 
-    function testZFuzz_Liquidate(uint256 amount) public {
+    function zFuzz_Liquidate(IERC20 token, uint256 amount) public {
         vm.assume(amount > 0);
-        uint256 maxBorrowAmount = 100_000e18;
+        uint256 maxBorrowAmount = 100_000 * DECIMALS;
         uint256 borrowerStartBalance = token.balanceOf(borrower);
         uint256 lenderStartBalance = token.balanceOf(lender);
         uint256 contractStartBalance = token.balanceOf(governanceTreasury);
@@ -626,12 +552,12 @@ contract TestLending is Test {
         uint256 interest =
             lending.getDebtWithPenalty(amount, lending.aprFromDuration(loanDuration), loanDuration, block.timestamp);
 
-        assertEq((token.balanceOf(borrower) - borrowerStartBalance) / 1e18, amount / 1e18);
-        assertEq((token.balanceOf(lender) - lenderStartBalance) / 1e18, interest / 1e18);
+        assertEq((token.balanceOf(borrower) - borrowerStartBalance) / DECIMALS, amount / DECIMALS);
+        assertEq((token.balanceOf(lender) - lenderStartBalance) / DECIMALS, interest / DECIMALS);
         assertEq(
-            (token.balanceOf(governanceTreasury) - contractStartBalance) / 1e18, (feePlusInterest - interest) / 1e18
+            (token.balanceOf(governanceTreasury) - contractStartBalance) / DECIMALS, (feePlusInterest - interest) / DECIMALS
         );
-        assertEq((liquidatorStartBalance - token.balanceOf(liquidator)) / 1e18, (feePlusInterest + amount) / 1e18);
+        assertEq((liquidatorStartBalance - token.balanceOf(liquidator)) / DECIMALS, (feePlusInterest + amount) / DECIMALS);
 
         assertEq(nft.ownerOf(1), address(liquidator));
     }

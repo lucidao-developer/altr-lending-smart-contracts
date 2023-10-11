@@ -54,10 +54,10 @@ Then you can use this shell to run the following commands inside docker.
 To compile the Solidity contracts, run:
 
 ```bash
-forge build
+sh ./compile.sh
 ```
 
-This will compile all `.sol` files in the `contracts` directory and output the ABI and bytecode in the `out` directory.
+This will compile all `.sol` files in the `src` directory and output the ABI and bytecode in the `out` directory.
 
 ## Run Tests
 
