@@ -65,6 +65,7 @@ contract TestUSDTPolygon is Test {
         Lending.ConstructorParams memory lendingParams = Lending.ConstructorParams(
             address(priceIndex),
             governanceTreasury,
+            treasuryManager,
             address(allowList),
             protocolFee,
             repayGracePeriod,
@@ -78,7 +79,6 @@ contract TestUSDTPolygon is Test {
             feeReductionFactor
         );
         lending = new Lending(lendingParams);
-        lending.grantRole(lending.TREASURY_MANAGER_ROLE(), treasuryManager);
 
         address usdtAddress = deployCode("USDTPolygon.sol:UChildERC20");
         IUSDTPolygon usdt = IUSDTPolygon(usdtAddress);

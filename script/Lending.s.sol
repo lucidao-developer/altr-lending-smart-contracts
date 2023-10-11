@@ -12,7 +12,7 @@ contract DeployLending is Script {
     address GOVERNANCE_TREASURY_ADDRESS = vm.envAddress("GovernanceTreasuryAddress");
     address PRICE_INDEX_ADDRESS = vm.envAddress("PriceIndexAddress");
     address ALLOW_LIST_ADDRESS = vm.envAddress("AllowListAddress");
-    address TREASURY_MANAGER = vm.envAddress("TreasuryManager");
+    address TREASURY_MANAGER_ADDRESS = vm.envAddress("TreasuryManager");
 
     function run() external {
         uint256 protocolFee = 150; // 1.5%
@@ -45,6 +45,7 @@ contract DeployLending is Script {
         Lending.ConstructorParams memory lendingParams = Lending.ConstructorParams(
             PRICE_INDEX_ADDRESS,
             GOVERNANCE_TREASURY_ADDRESS,
+            TREASURY_MANAGER_ADDRESS,
             ALLOW_LIST_ADDRESS,
             protocolFee,
             repayGracePeriod,
@@ -58,7 +59,6 @@ contract DeployLending is Script {
             feeReductionFactor
         );
         Lending lending = new Lending(lendingParams);
-        lending.grantRole(lending.TREASURY_MANAGER_ROLE(), TREASURY_MANAGER);
         vm.stopBroadcast();
         console.log("Lending contract successfully deplyed at: ", address(lending));
     }

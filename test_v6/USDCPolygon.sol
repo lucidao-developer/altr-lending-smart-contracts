@@ -199,7 +199,7 @@ contract Pausable is Ownable {
     }
 }
 
-pragma solidity ^0.6.0;
+pragma solidity 0.6.6;
 
 /**
  * @dev Interface of the ERC20 standard as defined in the EIP.
@@ -1364,7 +1364,7 @@ library ECRecover {
     }
 }
 
-pragma solidity ^0.6.2;
+pragma solidity 0.6.6;
 
 /**
  * @dev Collection of functions related to the address type
@@ -1504,7 +1504,7 @@ library Address {
     }
 }
 
-pragma solidity ^0.6.0;
+pragma solidity 0.6.6;
 
 /**
  * @title SafeERC20
@@ -1574,7 +1574,7 @@ library SafeERC20 {
     }
 }
 
-pragma solidity ^0.6.0;
+pragma solidity 0.6.6;
 
 /**
  * @dev Wrappers over Solidity's arithmetic operations with added overflow

@@ -28,6 +28,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     struct ConstructorParams {
         address priceIndex;
         address governanceTreasury;
+        address treasuryManager;
         address allowList;
         uint256 protocolFee;
         uint256 gracePeriod;
@@ -356,6 +357,8 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         _setLenderExclusiveLiquidationPeriod(_constructorParams.lenderExclusiveLiquidationPeriod);
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setRoleAdmin(TREASURY_MANAGER_ROLE, TREASURY_MANAGER_ROLE);
+        _grantRole(TREASURY_MANAGER_ROLE, _constructorParams.treasuryManager);
     }
 
     /**

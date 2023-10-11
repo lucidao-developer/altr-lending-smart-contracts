@@ -67,6 +67,7 @@ contract TestUSDTPolygon is Test {
         Lending.ConstructorParams memory lendingParams = Lending.ConstructorParams(
             address(priceIndex),
             governanceTreasury,
+            treasuryManager,
             address(allowList),
             protocolFee,
             repayGracePeriod,
@@ -80,7 +81,6 @@ contract TestUSDTPolygon is Test {
             feeReductionFactor
         );
         lending = new Lending(lendingParams);
-        lending.grantRole(lending.TREASURY_MANAGER_ROLE(), treasuryManager);
 
         address usdcAddress = deployCode("USDCPolygon.sol:FiatTokenV2");
         usdc = IUSDCPolygon(usdcAddress);

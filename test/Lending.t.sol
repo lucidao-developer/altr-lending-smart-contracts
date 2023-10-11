@@ -276,11 +276,20 @@ contract TestLending is Test {
         assertEq(lending.lenderExclusiveLiquidationPeriod(), 4 days);
         vm.stopPrank();
 
+        vm.startPrank(admin);
+        vm.expectRevert(
+            "AccessControl: account 0x0000000000000000000000000000000000000001 is missing role 0xede9dcdb0ce99dc7cec9c7be9246ad08b37853683ad91569c187b647ddf5e21c"
+        );
+        lending.setGovernanceTreasury(governanceTreasury);
+        vm.stopPrank();
+
         vm.startPrank(treasuryManager);
         vm.expectRevert("Lending: cannot be null address");
         lending.setGovernanceTreasury(address(0));
         lending.setGovernanceTreasury(governanceTreasury);
         assertEq(lending.governanceTreasury(), governanceTreasury);
+        lending.grantRole(lending.TREASURY_MANAGER_ROLE(), admin);
+        lending.revokeRole(lending.TREASURY_MANAGER_ROLE(), admin);
         vm.stopPrank();
 
         vm.startPrank(admin);

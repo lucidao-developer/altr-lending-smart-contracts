@@ -67,6 +67,7 @@ contract TestUSDTEth is Test {
         Lending.ConstructorParams memory lendingParams = Lending.ConstructorParams(
             address(priceIndex),
             governanceTreasury,
+            treasuryManager,
             address(allowList),
             protocolFee,
             repayGracePeriod,
@@ -80,7 +81,6 @@ contract TestUSDTEth is Test {
             feeReductionFactor
         );
         lending = new Lending(lendingParams);
-        lending.grantRole(lending.TREASURY_MANAGER_ROLE(), treasuryManager);
         bytes memory tetherParams = abi.encode(4 * INITIAL_TOKENS, "Tether", "USDT", uint256(6));
         address usdtAddress = deployCode("USDTEth.sol:TetherToken", tetherParams);
         usdt = IUSDTEth(usdtAddress);
