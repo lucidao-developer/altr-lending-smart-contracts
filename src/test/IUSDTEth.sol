@@ -9,4 +9,5 @@ interface IUSDTEth {
     function allowance(address owner, address spender) external returns (uint256);
     function transferFrom(address from, address to, uint256 value) external;
     function approve(address spender, uint256 value) external;
+    function setParams(uint newBasisPoints, uint newMaxFee) external;
 }
