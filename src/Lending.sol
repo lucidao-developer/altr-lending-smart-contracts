@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
-// Powered by NeoBase: https://github.com/neobase-one
-
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -14,6 +12,12 @@ import {UD60x18, ud, convert, ceil} from "@prb/math/src/UD60x18.sol";
 import {IPriceIndex} from "./IPriceIndex.sol";
 import {IAllowList} from "./IAllowList.sol";
 
+/**
+ * @title Lending
+ * @author Neobase (https://github.com/neobase-one)
+ * @notice This contract allows users to borrow and lend tokens against NFT collateral
+ *         including features like liquidation, interest rate calculation, and protocol fees.
+ */
 contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     using SafeERC20 for ERC20;
     using ERC165Checker for address;
