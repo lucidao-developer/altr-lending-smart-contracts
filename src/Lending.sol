@@ -476,12 +476,13 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
      * @custom:use-case After 7 days, Alice can repay her 500.000 USDT loan along with the accrued interest
      * and fees to get her NFT back
      * @dev Transfers the repayment amount and additional fees to the lender and contract respectively
-     * @dev Only allowlisted address can call this function
+     * @dev Only allowlisted address or loan borrower can call this function
      * @param _loanId The ID of the loan being repaid
      */
-    function repayLoan(uint256 _loanId) external nonReentrant onlyAllowListed {
+    function repayLoan(uint256 _loanId) external nonReentrant {
         Loan storage loan = loans[_loanId];
 
+        require(msg.sender == loan.borrower || allowList.isAddressAllowed(msg.sender), "Lending: address not allowed");
         require(loan.borrower != address(0) && loan.lender != address(0), "Lending: invalid loan id");
         require(!loan.paid, "Lending: loan already paid");
         require(block.timestamp < loan.startTime + loan.duration + repayGracePeriod, "Lending: too late");
@@ -921,8 +922,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
     function _setAllowList(address _allowList) internal {
         require(_allowList != address(0), "Lending: cannot be null address");
         require(
-            _allowList.supportsInterface(type(IAllowList).interfaceId),
-            "Lending: does not support IAllowList interface"
+            _allowList.supportsInterface(type(IAllowList).interfaceId), "Lending: does not support IAllowList interface"
         );
 
         allowList = IAllowList(_allowList);
