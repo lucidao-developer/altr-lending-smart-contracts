@@ -31,7 +31,7 @@ contract TestLending is Test {
         lending = _lending;
         nft = _nft;
         priceIndex = _priceIndex;
-        DECIMALS = 10**_decimals;
+        DECIMALS = 10 ** _decimals;
         INITIAL_TOKENS = 1_000_000 * DECIMALS;
     }
 
@@ -117,7 +117,7 @@ contract TestLending is Test {
         // penalty = [(loanDuration - repaymentDuration) / loanDuration] * interests
         // penalty = (46_656_000 - 2_592_000) / 46_656_000 * 891.67 = 842.13
         assertEq(token.balanceOf(borrower) / DECIMALS, 997_512); // initialBalance - (interest + protocol fee + origination fee + penalty) = 1_000_000 - [1016.67 + 960.19 + 510.20] = 997_512.94
-        assertEq(token.balanceOf(lender) / DECIMALS, 1_001_733); // intialBalance + interests + penalty = 1_000_000 + 891.67 + 842.13 ~ 1_001_733 
+        assertEq(token.balanceOf(lender) / DECIMALS, 1_001_733); // intialBalance + interests + penalty = 1_000_000 + 891.67 + 842.13 ~ 1_001_733
         assertEq(token.balanceOf(governanceTreasury) / DECIMALS, 753); // protocol fee + origination fee = [(1016.67-891.67) + (960.19-842.13) + 510.20] = 753.06
 
         assertEq(nft.ownerOf(1), address(borrower));
@@ -534,7 +534,8 @@ contract TestLending is Test {
         assertEq((borrowerStartBalance - token.balanceOf(borrower)) / DECIMALS, (feePlusInterest) / DECIMALS);
         assertEq((token.balanceOf(lender) - lenderStartBalance) / DECIMALS, interest / DECIMALS);
         assertEq(
-            (token.balanceOf(governanceTreasury) - contractStartBalance) / DECIMALS, (feePlusInterest - interest) / DECIMALS
+            (token.balanceOf(governanceTreasury) - contractStartBalance) / DECIMALS,
+            (feePlusInterest - interest) / DECIMALS
         );
     }
 
@@ -576,9 +577,12 @@ contract TestLending is Test {
         assertEq((token.balanceOf(borrower) - borrowerStartBalance) / DECIMALS, amount / DECIMALS);
         assertEq((token.balanceOf(lender) - lenderStartBalance) / DECIMALS, interest / DECIMALS);
         assertEq(
-            (token.balanceOf(governanceTreasury) - contractStartBalance) / DECIMALS, (feePlusInterest - interest) / DECIMALS
+            (token.balanceOf(governanceTreasury) - contractStartBalance) / DECIMALS,
+            (feePlusInterest - interest) / DECIMALS
         );
-        assertEq((liquidatorStartBalance - token.balanceOf(liquidator)) / DECIMALS, (feePlusInterest + amount) / DECIMALS);
+        assertEq(
+            (liquidatorStartBalance - token.balanceOf(liquidator)) / DECIMALS, (feePlusInterest + amount) / DECIMALS
+        );
 
         assertEq(nft.ownerOf(1), address(liquidator));
     }

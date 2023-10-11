@@ -556,8 +556,8 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
 
     /**
      * @notice Allows a lender to withdraw their stuck tokens if something fails during repayment
-     * @custom:use-case If Alice repay her loan but for some reason the token transfer to the lender fails, 
-     * the contract transfer those tokens on the contract itself and than the lender can try to solve the 
+     * @custom:use-case If Alice repay her loan but for some reason the token transfer to Bob fails,
+     * the contract transfer those tokens on the contract itself and than Bob can try to solve the
      * problem and withdraw the tokens when fixed using this function
      * @param token The address of the tokens that are stucked into the contract
      */
@@ -566,7 +566,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         require(stuckTokenAmount > 0, "Lending: you have no stuck tokens");
 
         delete stuckToken[token][msg.sender];
-        
+
         ERC20(token).approve(msg.sender, stuckTokenAmount);
     }
 

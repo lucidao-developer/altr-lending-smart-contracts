@@ -16,7 +16,7 @@ contract TestUSDTPolygon is Test {
     uint256 immutable MONTHS_18 = 60 * 60 * 24 * 540;
 
     uint256 immutable INITIAL_TOKENS = 1_000_000e6;
-    uint256 immutable DECIMALS = 10**6;
+    uint256 immutable DECIMALS = 10 ** 6;
 
     Lending public lending;
     IERC20 public token;
@@ -173,14 +173,14 @@ contract TestUSDTPolygon is Test {
         vm.startPrank(admin);
         usdc.blacklist(lender);
         vm.stopPrank();
-        
+
         vm.warp(MONTHS_1);
 
         vm.startPrank(borrower);
         lending.repayLoan(1);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(borrower) / DECIMALS, 997_512); 
+        assertEq(token.balanceOf(borrower) / DECIMALS, 997_512);
         assertEq(token.balanceOf(lender) / DECIMALS, 900_000);
         assertEq(token.balanceOf(governanceTreasury) / DECIMALS, 753);
         assertEq(token.balanceOf(address(lending)) / DECIMALS, 101_733);
@@ -196,7 +196,7 @@ contract TestUSDTPolygon is Test {
         token.transferFrom(address(lending), lender, stuckTokenAmount);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(borrower) / DECIMALS, 997_512); 
+        assertEq(token.balanceOf(borrower) / DECIMALS, 997_512);
         assertEq(token.balanceOf(lender) / DECIMALS, 1_001_733);
         assertEq(token.balanceOf(governanceTreasury) / DECIMALS, 753);
         assertEq(token.balanceOf(address(lending)) / DECIMALS, 0);

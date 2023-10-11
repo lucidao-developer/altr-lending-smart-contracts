@@ -3,7 +3,8 @@
 pragma solidity ^0.8.19;
 
 interface IUSDTPolygon {
-    function initialize(string calldata name_, string calldata symbol_, uint8 decimals_, address childChainManager) external;
+    function initialize(string calldata name_, string calldata symbol_, uint8 decimals_, address childChainManager)
+        external;
     function deposit(address user, bytes calldata depositData) external;
     function totalSupply() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);

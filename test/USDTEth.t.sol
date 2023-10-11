@@ -72,9 +72,9 @@ contract TestUSDTEth is Test {
             lenderExclusiveLiquidationPeriod
         );
         lending.grantRole(lending.TREASURY_MANAGER_ROLE(), treasuryManager);
-        bytes memory tetherParams = abi.encode(4 * INITIAL_TOKENS, "Tether", "USDT", uint(6));
+        bytes memory tetherParams = abi.encode(4 * INITIAL_TOKENS, "Tether", "USDT", uint256(6));
         address usdtAddress = deployCode("USDTEth.sol:TetherToken", tetherParams);
-        IUSDTEth usdt = IUSDTEth(usdtAddress); 
+        IUSDTEth usdt = IUSDTEth(usdtAddress);
         token = IERC20(usdtAddress);
 
         address[] memory tokens = new address[](1);
