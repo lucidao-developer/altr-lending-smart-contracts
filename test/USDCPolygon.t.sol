@@ -64,7 +64,21 @@ contract TestUSDTPolygon is Test {
 
         allowList = new TestAllowList();
         priceIndex = new TestPriceIndex();
-        Lending.ConstructorParams memory lendingParams = Lending.ConstructorParams(address(priceIndex), governanceTreasury, address(allowList), protocolFee, repayGracePeriod, repayGraceFee, originationFeeRanges, liquidationFee, durations, interestRates, baseOriginationFee, lenderExclusiveLiquidationPeriod, feeReductionFactor);
+        Lending.ConstructorParams memory lendingParams = Lending.ConstructorParams(
+            address(priceIndex),
+            governanceTreasury,
+            address(allowList),
+            protocolFee,
+            repayGracePeriod,
+            repayGraceFee,
+            originationFeeRanges,
+            liquidationFee,
+            durations,
+            interestRates,
+            baseOriginationFee,
+            lenderExclusiveLiquidationPeriod,
+            feeReductionFactor
+        );
         lending = new Lending(lendingParams);
         lending.grantRole(lending.TREASURY_MANAGER_ROLE(), treasuryManager);
 

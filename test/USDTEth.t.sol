@@ -64,7 +64,21 @@ contract TestUSDTEth is Test {
 
         allowList = new TestAllowList();
         priceIndex = new TestPriceIndex();
-        Lending.ConstructorParams memory lendingParams = Lending.ConstructorParams(address(priceIndex), governanceTreasury, address(allowList), protocolFee, repayGracePeriod, repayGraceFee, originationFeeRanges, liquidationFee, durations, interestRates, baseOriginationFee, lenderExclusiveLiquidationPeriod, feeReductionFactor);
+        Lending.ConstructorParams memory lendingParams = Lending.ConstructorParams(
+            address(priceIndex),
+            governanceTreasury,
+            address(allowList),
+            protocolFee,
+            repayGracePeriod,
+            repayGraceFee,
+            originationFeeRanges,
+            liquidationFee,
+            durations,
+            interestRates,
+            baseOriginationFee,
+            lenderExclusiveLiquidationPeriod,
+            feeReductionFactor
+        );
         lending = new Lending(lendingParams);
         lending.grantRole(lending.TREASURY_MANAGER_ROLE(), treasuryManager);
         bytes memory tetherParams = abi.encode(4 * INITIAL_TOKENS, "Tether", "USDT", uint256(6));
@@ -202,8 +216,12 @@ contract TestUSDTEth is Test {
         uint256 interest =
             lending.getDebtWithPenalty(amount, lending.aprFromDuration(loanDuration), loanDuration, repaymentDuration);
 
-        assertApproxEqAbs((borrowerStartBalance - token.balanceOf(borrower)) / DECIMALS, feePlusInterest / DECIMALS, 100 * DECIMALS);
-        assertApproxEqAbs((token.balanceOf(lender) - lenderStartBalance) / DECIMALS, interest / DECIMALS, 100 * DECIMALS);
+        assertApproxEqAbs(
+            (borrowerStartBalance - token.balanceOf(borrower)) / DECIMALS, feePlusInterest / DECIMALS, 100 * DECIMALS
+        );
+        assertApproxEqAbs(
+            (token.balanceOf(lender) - lenderStartBalance) / DECIMALS, interest / DECIMALS, 100 * DECIMALS
+        );
         assertApproxEqAbs(
             (token.balanceOf(governanceTreasury) - contractStartBalance) / DECIMALS,
             (feePlusInterest - interest) / DECIMALS,
@@ -257,9 +275,11 @@ contract TestUSDTEth is Test {
             25e15
         );
         assertApproxEqRel(
-            (liquidatorStartBalance - token.balanceOf(liquidator)) / DECIMALS, (feePlusInterest + amount) / DECIMALS, 25e15
+            (liquidatorStartBalance - token.balanceOf(liquidator)) / DECIMALS,
+            (feePlusInterest + amount) / DECIMALS,
+            25e15
         );
-        
+
         assertEq(nft.ownerOf(1), address(liquidator));
     }
 }

@@ -30,7 +30,13 @@ contract TestLending is Test {
     address nonAllowed = address(0x6);
     address treasuryManager = address(0xDA0);
 
-    constructor(Lending _lending, TestERC721 _nft, TestPriceIndex _priceIndex, TestAllowList _allowList, uint256 _decimals) {
+    constructor(
+        Lending _lending,
+        TestERC721 _nft,
+        TestPriceIndex _priceIndex,
+        TestAllowList _allowList,
+        uint256 _decimals
+    ) {
         lending = _lending;
         nft = _nft;
         priceIndex = _priceIndex;

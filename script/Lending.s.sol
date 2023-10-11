@@ -42,7 +42,21 @@ contract DeployLending is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         console.log("Deploying Lending contract...");
         vm.startBroadcast(deployerPrivateKey);
-        Lending.ConstructorParams memory lendingParams = Lending.ConstructorParams(PRICE_INDEX_ADDRESS, GOVERNANCE_TREASURY_ADDRESS, ALLOW_LIST_ADDRESS, protocolFee, repayGracePeriod, repayGraceFee, originationFeeRanges, liquidationFee, durations, interestRates, baseOriginationFee, lenderExclusiveLiquidationPeriod, feeReductionFactor);
+        Lending.ConstructorParams memory lendingParams = Lending.ConstructorParams(
+            PRICE_INDEX_ADDRESS,
+            GOVERNANCE_TREASURY_ADDRESS,
+            ALLOW_LIST_ADDRESS,
+            protocolFee,
+            repayGracePeriod,
+            repayGraceFee,
+            originationFeeRanges,
+            liquidationFee,
+            durations,
+            interestRates,
+            baseOriginationFee,
+            lenderExclusiveLiquidationPeriod,
+            feeReductionFactor
+        );
         Lending lending = new Lending(lendingParams);
         lending.grantRole(lending.TREASURY_MANAGER_ROLE(), TREASURY_MANAGER);
         vm.stopBroadcast();
