@@ -899,7 +899,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControlDefaultAdminR
             convert(_borrowedAmount * _apr * _repaymentDuration).div(convert(SECONDS_IN_YEAR * PRECISION));
         UD60x18 penaltyFactor = convert(_loanDuration - _repaymentDuration).div(convert(_loanDuration));
 
-        return convert(accruedDebt.add(accruedDebt.mul(penaltyFactor)));
+        return convert(ceil(accruedDebt.add(accruedDebt.mul(penaltyFactor))));
     }
 
     /**
