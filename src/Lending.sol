@@ -588,7 +588,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
      * problem and withdraw the tokens when fixed using this function
      * @param token The address of the tokens that are stucked into the contract
      */
-    function withdrawStuckToken(address token) external {
+    function withdrawStuckToken(address token) external nonReentrant {
         uint256 stuckTokenAmount = stuckToken[token][msg.sender];
         require(stuckTokenAmount > 0, "Lending: you have no stuck tokens");
 
