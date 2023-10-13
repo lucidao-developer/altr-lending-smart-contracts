@@ -177,6 +177,24 @@ contract TestLending is Test {
         vm.startPrank(borrower);
         vm.expectRevert("Lending: loan undercollateralized");
         lending.acceptLoan(2);
+
+        vm.startPrank(admin);
+        priceIndex.setValuation(address(nft), 2, 100_000, 101);
+        vm.stopPrank();
+
+        vm.startPrank(borrower);
+        vm.expectRevert("Lending: ltv greater than max");
+        lending.acceptLoan(2);
+
+        vm.startPrank(admin);
+        priceIndex.setValuation(address(nft), 2, 200_000, 50);
+        vm.stopPrank();
+
+        vm.warp(priceIndex.getValuation(address(nft), 2).timestamp + lending.VALUATION_EXPIRY() + 1);
+
+        vm.startPrank(borrower);
+        vm.expectRevert("Lending: valuation expired");
+        lending.acceptLoan(2);
         vm.stopPrank();
     }
 
