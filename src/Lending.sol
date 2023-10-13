@@ -504,13 +504,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
 
         loan.paid = true;
 
-        try this.attemptTransfer(loan.token, msg.sender, loan.lender, lenderPayable) {}
-        catch {
-            uint256 balanceBefore = ERC20(loan.token).balanceOf(address(this));
-            ERC20(loan.token).safeTransferFrom(msg.sender, address(this), lenderPayable);
-            uint256 balanceAfter = ERC20(loan.token).balanceOf(address(this));
-            stuckToken[loan.token][loan.lender] += balanceAfter - balanceBefore;
-        }
+        repayLender(loan.token, loan.lender, lenderPayable);
 
         if (block.timestamp > loan.startTime + loan.duration) {
             platformFee += (lenderPayable * repayGraceFee) / PRECISION;
@@ -573,7 +567,8 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         uint256 platformFee = totalPayable - lenderPayable;
 
         loan.paid = true;
-        ERC20(loan.token).safeTransferFrom(msg.sender, loan.lender, lenderPayable);
+
+        repayLender(loan.token, loan.lender, lenderPayable);
 
         if (platformFee > 0) {
             ERC20(loan.token).safeTransferFrom(msg.sender, governanceTreasury, platformFee);
@@ -1063,5 +1058,23 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         );
 
         lenderExclusiveLiquidationPeriod = _lenderExclusiveLiquidationPeriod;
+    }
+
+    /**
+     * @notice Internal utility function to repay lender of borrower debt
+     * @dev It handles the case of transfer failure by temporarily storing the funds on
+     * the contract, lender can than receive the funds calling withdrawStuckToken
+     * @param _token The address of the token to use to repay the debt
+     * @param _lender The address of the lender to repay the debt to
+     * @param _lenderPayable The token amount to transfer to the lender
+     */
+    function repayLender(address _token, address _lender, uint256 _lenderPayable) internal {
+        try this.attemptTransfer(_token, msg.sender, _lender, _lenderPayable) {}
+        catch {
+            uint256 balanceBefore = ERC20(_token).balanceOf(address(this));
+            ERC20(_token).safeTransferFrom(msg.sender, address(this), _lenderPayable);
+            uint256 balanceAfter = ERC20(_token).balanceOf(address(this));
+            stuckToken[_token][_lender] += balanceAfter - balanceBefore;
+        }
     }
 }
