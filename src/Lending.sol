@@ -594,7 +594,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
 
         delete stuckToken[token][msg.sender];
 
-        ERC20(token).approve(msg.sender, stuckTokenAmount);
+        ERC20(token).safeIncreaseAllowance(msg.sender, stuckTokenAmount);
     }
 
     /**
