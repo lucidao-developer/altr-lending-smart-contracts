@@ -6,7 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {AccessControlDefaultAdminRules} from "@openzeppelin/contracts/access/AccessControlDefaultAdminRules.sol";
 import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
 import {UD60x18, ud, convert, ceil} from "@prb/math/src/UD60x18.sol";
 import {IPriceIndex} from "./IPriceIndex.sol";
@@ -18,7 +18,7 @@ import {IAllowList} from "./IAllowList.sol";
  * @notice This contract allows users to borrow and lend tokens against NFT collateral
  *         including features like liquidation, interest rate calculation, and protocol fees.
  */
-contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
+contract Lending is ReentrancyGuard, IERC721Receiver, AccessControlDefaultAdminRules {
     using SafeERC20 for ERC20;
     using ERC165Checker for address;
 
@@ -342,7 +342,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
      * @notice Contract constructor
      * @param _constructorParams The constructor parameters
      */
-    constructor(ConstructorParams memory _constructorParams) {
+    constructor(ConstructorParams memory _constructorParams) AccessControlDefaultAdminRules(1 days, msg.sender) {
         _setProtocolFee(_constructorParams.protocolFee);
         _setRepayGracePeriod(_constructorParams.gracePeriod);
         _setRepayGraceFee(_constructorParams.repayGraceFee);
@@ -356,7 +356,6 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControl {
         _setFeeReductionFactor(_constructorParams.feeReductionFactor);
         _setLenderExclusiveLiquidationPeriod(_constructorParams.lenderExclusiveLiquidationPeriod);
 
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setRoleAdmin(TREASURY_MANAGER_ROLE, TREASURY_MANAGER_ROLE);
         _grantRole(TREASURY_MANAGER_ROLE, _constructorParams.treasuryManager);
     }
