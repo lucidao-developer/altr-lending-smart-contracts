@@ -94,3 +94,4 @@ This will output the documentation in the docs folder and serve it on the specif
 This project has been built with the help of:
 
 [![GitHub](https://img.shields.io/badge/GitHub-NeoBase-blue)](https://github.com/neobase-one)
+
