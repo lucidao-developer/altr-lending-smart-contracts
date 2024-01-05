@@ -396,15 +396,16 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControlDefaultAdminR
 
         require(valuation.timestamp + VALUATION_EXPIRY > block.timestamp, "Lending: valuation expired");
         require(valuation.ltv <= 100, "Lending: ltv greater than max");
-        require(
-            _amount <= (valuation.price * (10 ** ERC20(_token).decimals()) * valuation.ltv) / 100,
-            "Lending: amount greater than max borrow"
-        );
+        
+        uint256 valuationAmount = (valuation.price * (10 ** ERC20(_token).decimals()) * valuation.ltv) / 100;
+
+        require(_amount <= valuationAmount, "Lending: amount greater than max borrow");
 
         Loan storage loan = loans[++lastLoanId];
         loan.borrower = msg.sender;
         loan.token = _token;
-        loan.amount = _amount;
+        // FIXME: loan amount fixed to valuationAmount must be removed when the liquidation strategy is reworked.
+        loan.amount = valuationAmount;
         loan.nftCollection = _nftCollection;
         loan.nftId = _nftId;
         loan.duration = _duration;
