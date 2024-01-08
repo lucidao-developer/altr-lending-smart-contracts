@@ -114,16 +114,16 @@ contract TestUSDTEth is Test {
         vm.stopPrank();
 
         vm.startPrank(borrower);
-        usdt.approve(address(lending), 2 ** 256 - 1);
+        usdt.approve(address(lending), type(uint256).max);
         nft.setApprovalForAll(address(lending), true);
         vm.stopPrank();
 
         vm.startPrank(lender);
-        usdt.approve(address(lending), 2 ** 256 - 1);
+        usdt.approve(address(lending), type(uint256).max);
         vm.stopPrank();
 
         vm.startPrank(liquidator);
-        usdt.approve(address(lending), 2 ** 256 - 1);
+        usdt.approve(address(lending), type(uint256).max);
         vm.stopPrank();
 
         test = new TestLending(lending, nft, priceIndex, allowList, 6);
@@ -161,60 +161,69 @@ contract TestUSDTEth is Test {
         test.repayLoan(token);
     }
 
-    function testZFuzz_Lending(uint256 amount, uint256 repaymentDuration) public {
-        test.zFuzz_Lending(token, amount, repaymentDuration);
+    function testZFuzz_Lending(uint256 collateralValue, uint256 repaymentDuration) public {
+        test.zFuzz_Lending(token, collateralValue, repaymentDuration);
     }
 
-    function testZFuzz_Liquidate(uint256 amount) public {
-        test.zFuzz_Liquidate(token, amount);
+    function testZFuzz_Liquidate(uint256 collateralValue) public {
+        test.zFuzz_Liquidate(token, collateralValue);
     }
 
-    function testZFuzz_LendingWithTokenFee(uint256 amount, uint256 repaymentDuration) public {
-        vm.assume(amount > 100_000_000);
+    function testZFuzz_LendingWithTokenFee(uint256 collateralValue, uint256 repaymentDuration) public {
+        vm.assume(collateralValue > DECIMALS && collateralValue < type(uint256).max / (DECIMALS * 50));
         vm.assume(repaymentDuration > 1 days);
         vm.startPrank(admin);
         usdt.setParams(1, 49);
         vm.stopPrank();
         uint256 loanDuration = MONTHS_18;
         vm.assume(repaymentDuration < loanDuration);
-        uint256 maxBorrowAmount = 100_000 * DECIMALS;
         uint256 borrowerStartBalance = token.balanceOf(borrower);
         uint256 lenderStartBalance = token.balanceOf(lender);
         uint256 contractStartBalance = token.balanceOf(governanceTreasury);
 
+        vm.startPrank(admin);
+        priceIndex.setValuation(address(nft), 1, collateralValue, 50);
+        vm.stopPrank();
+        uint256 maxBorrowAmount = collateralValue * DECIMALS / 2;
+
         vm.startPrank(borrower);
-        if (amount > maxBorrowAmount) {
-            vm.expectRevert("Lending: amount greater than max borrow");
-            lending.requestLoan(address(token), amount, address(nft), 1, MONTHS_18, MONTHS_18);
-            return;
-        }
-        lending.requestLoan(address(token), amount, address(nft), 1, loanDuration, MONTHS_18);
+        lending.requestLoan(address(token), maxBorrowAmount, address(nft), 1, loanDuration, MONTHS_18);
         assertEq(lending.lastLoanId(), 1);
         vm.stopPrank();
 
         Lending.Loan memory loan = lending.getLoan(1);
         assertEq(loan.borrower, borrower);
-        assertEq(loan.amount, amount);
+        assertEq(loan.amount, maxBorrowAmount);
         assertEq(loan.token, address(token));
         assertEq(loan.nftCollection, address(nft));
         assertEq(loan.nftId, 1);
         assertEq(loan.duration, loanDuration);
 
         vm.startPrank(lender);
+        if (maxBorrowAmount > INITIAL_TOKENS) {
+            return;
+        }
         lending.acceptLoan(1);
         vm.stopPrank();
 
         vm.warp(repaymentDuration);
 
         vm.startPrank(borrower);
+        uint256 feePlusInterest = lending.getDebtWithPenalty(
+            maxBorrowAmount,
+            lending.aprFromDuration(loanDuration) + lending.protocolFee(),
+            loanDuration,
+            block.timestamp
+        ) + lending.getOriginationFee(maxBorrowAmount, address(token));
+        uint256 interest = lending.getDebtWithPenalty(
+            maxBorrowAmount, lending.aprFromDuration(loanDuration), loanDuration, repaymentDuration
+        );
+
+        if (maxBorrowAmount + feePlusInterest > INITIAL_TOKENS) {
+            return;
+        }
         lending.repayLoan(1);
         vm.stopPrank();
-
-        uint256 feePlusInterest = lending.getDebtWithPenalty(
-            amount, lending.aprFromDuration(loanDuration) + lending.protocolFee(), loanDuration, block.timestamp
-        ) + lending.getOriginationFee(amount, address(token));
-        uint256 interest =
-            lending.getDebtWithPenalty(amount, lending.aprFromDuration(loanDuration), loanDuration, repaymentDuration);
 
         assertApproxEqAbs(
             (borrowerStartBalance - token.balanceOf(borrower)) / DECIMALS, feePlusInterest / DECIMALS, 100 * DECIMALS
@@ -229,28 +238,30 @@ contract TestUSDTEth is Test {
         );
     }
 
-    function testZFuzz_LiquidateWithTokenFee(uint256 amount) public {
-        vm.assume(amount > 1_000_000);
+    function testZFuzz_LiquidateWithTokenFee(uint256 collateralValue) public {
+        vm.assume(collateralValue > DECIMALS && collateralValue < type(uint256).max / (DECIMALS * 50));
         vm.startPrank(admin);
         usdt.setParams(1, 49);
         vm.stopPrank();
-        uint256 maxBorrowAmount = 100_000 * DECIMALS;
         uint256 borrowerStartBalance = token.balanceOf(borrower);
         uint256 lenderStartBalance = token.balanceOf(lender);
         uint256 contractStartBalance = token.balanceOf(governanceTreasury);
         uint256 liquidatorStartBalance = token.balanceOf(liquidator);
         uint256 loanDuration = MONTHS_18;
 
+        vm.startPrank(admin);
+        priceIndex.setValuation(address(nft), 1, collateralValue, 50);
+        vm.stopPrank();
+        uint256 maxBorrowAmount = collateralValue * DECIMALS / 2;
+
         vm.startPrank(borrower);
-        if (amount > maxBorrowAmount) {
-            vm.expectRevert("Lending: amount greater than max borrow");
-            lending.requestLoan(address(token), amount, address(nft), 1, loanDuration, MONTHS_18);
-            return;
-        }
-        lending.requestLoan(address(token), amount, address(nft), 1, loanDuration, MONTHS_18);
+        lending.requestLoan(address(token), maxBorrowAmount, address(nft), 1, loanDuration, MONTHS_18);
         vm.stopPrank();
 
         vm.startPrank(lender);
+        if (maxBorrowAmount > INITIAL_TOKENS) {
+            return;
+        }
         lending.acceptLoan(1);
         vm.stopPrank();
 
@@ -258,16 +269,25 @@ contract TestUSDTEth is Test {
         vm.expectRevert("Lending: too early");
         lending.liquidateLoan(1);
         vm.warp(MONTHS_18 + lending.repayGracePeriod() + lending.lenderExclusiveLiquidationPeriod() + 1);
+        uint256 feePlusInterest = lending.getDebtWithPenalty(
+            maxBorrowAmount,
+            lending.aprFromDuration(loanDuration) + lending.protocolFee(),
+            loanDuration,
+            block.timestamp
+        ) + lending.getOriginationFee(maxBorrowAmount, address(token)) + lending.getLiquidationFee(maxBorrowAmount);
+        uint256 interest = lending.getDebtWithPenalty(
+            maxBorrowAmount, lending.aprFromDuration(loanDuration), loanDuration, block.timestamp
+        );
+
+        if (maxBorrowAmount + feePlusInterest > INITIAL_TOKENS) {
+            return;
+        }
         lending.liquidateLoan(1);
         vm.stopPrank();
 
-        uint256 feePlusInterest = lending.getDebtWithPenalty(
-            amount, lending.aprFromDuration(loanDuration) + lending.protocolFee(), loanDuration, block.timestamp
-        ) + lending.getOriginationFee(amount, address(token)) + lending.getLiquidationFee(amount);
-        uint256 interest =
-            lending.getDebtWithPenalty(amount, lending.aprFromDuration(loanDuration), loanDuration, block.timestamp);
-
-        assertApproxEqRel((token.balanceOf(borrower) - borrowerStartBalance) / DECIMALS, amount / DECIMALS, 25e15);
+        assertApproxEqRel(
+            (token.balanceOf(borrower) - borrowerStartBalance) / DECIMALS, maxBorrowAmount / DECIMALS, 25e15
+        );
         assertApproxEqRel((token.balanceOf(lender) - lenderStartBalance) / DECIMALS, interest / DECIMALS, 25e15);
         assertApproxEqRel(
             (token.balanceOf(governanceTreasury) - contractStartBalance) / DECIMALS,
@@ -276,7 +296,7 @@ contract TestUSDTEth is Test {
         );
         assertApproxEqRel(
             (liquidatorStartBalance - token.balanceOf(liquidator)) / DECIMALS,
-            (feePlusInterest + amount) / DECIMALS,
+            (feePlusInterest + maxBorrowAmount) / DECIMALS,
             25e15
         );
 

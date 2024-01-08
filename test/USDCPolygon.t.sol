@@ -87,7 +87,7 @@ contract TestUSDTPolygon is Test {
         token = IERC20(usdcAddress);
         usdc.initialize("USDCPolygon", "USDC", "USD", 6, admin, admin, admin, admin);
         usdc.initializeV2("USDCPolygon");
-        usdc.configureMinter(admin, 2 ** 256 - 1);
+        usdc.configureMinter(admin, type(uint256).max);
         usdc.mint(borrower, INITIAL_TOKENS);
         usdc.mint(lender, INITIAL_TOKENS);
         usdc.mint(liquidator, INITIAL_TOKENS);
@@ -118,16 +118,16 @@ contract TestUSDTPolygon is Test {
         vm.stopPrank();
 
         vm.startPrank(borrower);
-        token.approve(address(lending), 2 ** 256 - 1);
+        token.approve(address(lending), type(uint256).max);
         nft.setApprovalForAll(address(lending), true);
         vm.stopPrank();
 
         vm.startPrank(lender);
-        token.approve(address(lending), 2 ** 256 - 1);
+        token.approve(address(lending), type(uint256).max);
         vm.stopPrank();
 
         vm.startPrank(liquidator);
-        token.approve(address(lending), 2 ** 256 - 1);
+        token.approve(address(lending), type(uint256).max);
         vm.stopPrank();
 
         test = new TestLending(lending, nft, priceIndex, allowList, 6);

@@ -114,16 +114,16 @@ contract TestUSDTPolygon is Test {
         vm.stopPrank();
 
         vm.startPrank(borrower);
-        token.approve(address(lending), 2 ** 256 - 1);
+        token.approve(address(lending), type(uint256).max);
         nft.setApprovalForAll(address(lending), true);
         vm.stopPrank();
 
         vm.startPrank(lender);
-        token.approve(address(lending), 2 ** 256 - 1);
+        token.approve(address(lending), type(uint256).max);
         vm.stopPrank();
 
         vm.startPrank(liquidator);
-        token.approve(address(lending), 2 ** 256 - 1);
+        token.approve(address(lending), type(uint256).max);
         vm.stopPrank();
 
         test = new TestLending(lending, nft, priceIndex, allowList, 6);

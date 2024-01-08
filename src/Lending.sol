@@ -396,7 +396,7 @@ contract Lending is ReentrancyGuard, IERC721Receiver, AccessControlDefaultAdminR
 
         require(valuation.timestamp + VALUATION_EXPIRY > block.timestamp, "Lending: valuation expired");
         require(valuation.ltv <= 100, "Lending: ltv greater than max");
-        
+
         uint256 valuationAmount = (valuation.price * (10 ** ERC20(_token).decimals()) * valuation.ltv) / 100;
 
         require(_amount <= valuationAmount, "Lending: amount greater than max borrow");
