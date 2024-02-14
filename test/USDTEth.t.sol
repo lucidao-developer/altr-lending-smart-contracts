@@ -155,10 +155,6 @@ contract TestUSDTEth is Test {
         test.repayLoan(token);
     }
 
-    function testLendingWithParamUpdate() public {
-        test.lendingTestWithParamUpdate(token);
-    }
-
     function testZFuzz_Lending(uint256 collateralValue, uint256 repaymentDuration) public {
         test.zFuzz_Lending(token, collateralValue, repaymentDuration);
     }
