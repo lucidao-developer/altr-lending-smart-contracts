@@ -14,7 +14,7 @@ import {TestAllowList} from "../src/test/TestAllowList.sol";
 contract TestUSDTEth is Test {
     uint256 immutable WEEK_1 = 7 * 60 * 60 * 24;
     uint256 immutable MONTHS_1 = 60 * 60 * 24 * 30;
-    uint256 immutable MONTHS_18 = 60 * 60 * 24 * 540;
+    uint256 immutable MONTHS_12 = 60 * 60 * 24 * 360;
     uint256 immutable DECIMALS = 10 ** 6;
 
     uint256 immutable INITIAL_TOKENS = 1_000_000e6;
@@ -44,21 +44,15 @@ contract TestUSDTEth is Test {
         originationFeeRanges[1] = 100_000; // 100k
         originationFeeRanges[2] = 500_000; // 500k
         uint256 liquidationFee = 500; // 5%
-        uint256[] memory durations = new uint256[](6);
-        durations[0] = WEEK_1;
-        durations[1] = MONTHS_1;
-        durations[2] = 3 * MONTHS_1;
-        durations[3] = 6 * MONTHS_1;
-        durations[4] = 12 * MONTHS_1;
-        durations[5] = MONTHS_18;
-        uint256[] memory interestRates = new uint256[](6);
-        interestRates[0] = 660; // 6.6%
-        interestRates[1] = 730; // 7.3%
-        interestRates[2] = 800; // 8%
-        interestRates[3] = 880; // 8.8%
-        interestRates[4] = 970; // 9.7%
-        interestRates[5] = 1070; // 10.7%
-        uint256 baseOriginationFee = 100; // 1%
+        uint256[] memory durations = new uint256[](3);
+        durations[0] = 3 * MONTHS_1;
+        durations[1] = 6 * MONTHS_1;
+        durations[2] = 12 * MONTHS_1;
+        uint256[] memory interestRates = new uint256[](3);
+        interestRates[0] = 800; // 8%
+        interestRates[1] = 880; // 8.8%
+        interestRates[2] = 970; // 9.7%
+        uint256 baseOriginationFee = 0; // 0%
         uint256 lenderExclusiveLiquidationPeriod = 2 days;
         uint256 feeReductionFactor = 14_000; // 140%
 
@@ -161,6 +155,10 @@ contract TestUSDTEth is Test {
         test.repayLoan(token);
     }
 
+    function testLendingWithParamUpdate() public {
+        test.lendingTestWithParamUpdate(token);
+    }
+
     function testZFuzz_Lending(uint256 collateralValue, uint256 repaymentDuration) public {
         test.zFuzz_Lending(token, collateralValue, repaymentDuration);
     }
@@ -175,7 +173,7 @@ contract TestUSDTEth is Test {
         vm.startPrank(admin);
         usdt.setParams(1, 49);
         vm.stopPrank();
-        uint256 loanDuration = MONTHS_18;
+        uint256 loanDuration = MONTHS_12;
         vm.assume(repaymentDuration < loanDuration);
         uint256 borrowerStartBalance = token.balanceOf(borrower);
         uint256 lenderStartBalance = token.balanceOf(lender);
@@ -187,7 +185,7 @@ contract TestUSDTEth is Test {
         uint256 maxBorrowAmount = collateralValue * DECIMALS / 2;
 
         vm.startPrank(borrower);
-        lending.requestLoan(address(token), maxBorrowAmount, address(nft), 1, loanDuration, MONTHS_18);
+        lending.requestLoan(address(token), maxBorrowAmount, address(nft), 1, loanDuration, MONTHS_12);
         assertEq(lending.lastLoanId(), 1);
         vm.stopPrank();
 
@@ -247,7 +245,7 @@ contract TestUSDTEth is Test {
         uint256 lenderStartBalance = token.balanceOf(lender);
         uint256 contractStartBalance = token.balanceOf(governanceTreasury);
         uint256 liquidatorStartBalance = token.balanceOf(liquidator);
-        uint256 loanDuration = MONTHS_18;
+        uint256 loanDuration = MONTHS_12;
 
         vm.startPrank(admin);
         priceIndex.setValuation(address(nft), 1, collateralValue, 50);
@@ -255,7 +253,7 @@ contract TestUSDTEth is Test {
         uint256 maxBorrowAmount = collateralValue * DECIMALS / 2;
 
         vm.startPrank(borrower);
-        lending.requestLoan(address(token), maxBorrowAmount, address(nft), 1, loanDuration, MONTHS_18);
+        lending.requestLoan(address(token), maxBorrowAmount, address(nft), 1, loanDuration, MONTHS_12);
         vm.stopPrank();
 
         vm.startPrank(lender);
@@ -268,7 +266,7 @@ contract TestUSDTEth is Test {
         vm.startPrank(liquidator);
         vm.expectRevert("Lending: too early");
         lending.liquidateLoan(1);
-        vm.warp(MONTHS_18 + lending.repayGracePeriod() + lending.lenderExclusiveLiquidationPeriod() + 1);
+        vm.warp(MONTHS_12 + lending.repayGracePeriod() + lending.lenderExclusiveLiquidationPeriod() + 1);
         uint256 feePlusInterest = lending.getDebtWithPenalty(
             maxBorrowAmount,
             lending.aprFromDuration(loanDuration) + lending.protocolFee(),

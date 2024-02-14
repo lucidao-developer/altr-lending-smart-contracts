@@ -14,7 +14,7 @@ import {TestAllowList} from "../src/test/TestAllowList.sol";
 contract TestUSDTPolygon is Test {
     uint256 immutable WEEK_1 = 7 * 60 * 60 * 24;
     uint256 immutable MONTHS_1 = 60 * 60 * 24 * 30;
-    uint256 immutable MONTHS_18 = 60 * 60 * 24 * 540;
+    uint256 immutable MONTHS_12 = 60 * 60 * 24 * 360;
 
     uint256 immutable INITIAL_TOKENS = 1_000_000e6;
 
@@ -42,21 +42,15 @@ contract TestUSDTPolygon is Test {
         originationFeeRanges[1] = 100_000; // 100k
         originationFeeRanges[2] = 500_000; // 500k
         uint256 liquidationFee = 500; // 5%
-        uint256[] memory durations = new uint256[](6);
-        durations[0] = WEEK_1;
-        durations[1] = MONTHS_1;
-        durations[2] = 3 * MONTHS_1;
-        durations[3] = 6 * MONTHS_1;
-        durations[4] = 12 * MONTHS_1;
-        durations[5] = MONTHS_18;
-        uint256[] memory interestRates = new uint256[](6);
-        interestRates[0] = 660; // 6.6%
-        interestRates[1] = 730; // 7.3%
-        interestRates[2] = 800; // 8%
-        interestRates[3] = 880; // 8.8%
-        interestRates[4] = 970; // 9.7%
-        interestRates[5] = 1070; // 10.7%
-        uint256 baseOriginationFee = 100; // 1%
+        uint256[] memory durations = new uint256[](3);
+        durations[0] = 3 * MONTHS_1;
+        durations[1] = 6 * MONTHS_1;
+        durations[2] = 12 * MONTHS_1;
+        uint256[] memory interestRates = new uint256[](3);
+        interestRates[0] = 800; // 8%
+        interestRates[1] = 880; // 8.8%
+        interestRates[2] = 970; // 9.7%
+        uint256 baseOriginationFee = 0; // 0%
         uint256 lenderExclusiveLiquidationPeriod = 2 days;
         uint256 feeReductionFactor = 14_000; // 140%
 
@@ -159,6 +153,10 @@ contract TestUSDTPolygon is Test {
 
     function testRepayLoan() public {
         test.repayLoan(token);
+    }
+
+    function testLendingWithParamUpdate() public {
+        test.lendingTestWithParamUpdate(token);
     }
 
     function testZFuzz_Lending(uint256 amount, uint256 repaymentDuration) public {
